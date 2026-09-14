@@ -1,0 +1,71 @@
+services:
+  app-core:
+    image: mcr.microsoft.com/dotnet/sdk:9.0
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - nuget-cache:/root/.nuget/packages
+      - /workspace/src/App.Core/bin
+      - /workspace/src/App.Core/obj
+      - /workspace/src/App.Shared/bin
+      - /workspace/src/App.Shared/obj
+      - /workspace/src/App.Modules.Finance/bin
+      - /workspace/src/App.Modules.Finance/obj
+      - /workspace/src/App.Modules.Travail/bin
+      - /workspace/src/App.Modules.Travail/obj
+    command: ["dotnet", "watch", "run", "--project", "src/App.Core/App.Core.csproj", "--urls", "http://0.0.0.0:8080"]
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.dev
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER: "true"
+      ConnectionStrings__Default: Server=mariadb;Port=3306;Database=${DB_NAME:-gaia_life};User=gaia;Password=${DB_PASSWORD:-changeme}
+      SeedAdmin__Email: admin@gaia.local
+      SeedAdmin__Password: Admin123!
+      SeedAdmin__AutoLogin: "true"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /workspace/src
+        - action: rebuild
+          path: ./src/App.Core/App.Core.csproj
+    networks:
+      - gaia
+
+  mariadb:
+    image: mariadb:11.6
+    env_file:
+      - .env.dev
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-changeme_root}
+      MARIADB_DATABASE: ${DB_NAME:-gaia_life}
+      MARIADB_USER: gaia
+      MARIADB_PASSWORD: ${DB_PASSWORD:-changeme}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - gaia
+
+volumes:
+  mariadb_data:
+  nuget-cache:
+
+networks:
+  gaia:
+    driver: bridge

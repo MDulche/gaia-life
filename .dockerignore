@@ -1,0 +1,16 @@
+**/.git
+**/.vs
+**/bin/
+**/obj/
+**/.idea
+**/.vscode
+**/*.user
+**/*.suo
+.env
+.env.dev
+.env.prod
+backups/
+docs/
+.github/
+README.md
+**/appsettings.Development.json

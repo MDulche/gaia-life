@@ -1,0 +1,28 @@
+@page "/Account/Logout"
+@layout global::App.Core.Components.Layout.AccountLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>Déconnexion</PageTitle>
+
+<p class="text-muted">Déconnexion en cours…</p>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [Inject]
+    private SignInManager<IdentityUser> SignInManager { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpContext.User.Identity?.IsAuthenticated == true)
+        {
+            await SignInManager.SignOutAsync();
+        }
+
+        NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+    }
+}

@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore GaiaLife.sln
+
+      - name: Build
+        run: dotnet build GaiaLife.sln --configuration Release --no-restore
+
+      - name: Test
+        run: |
+          mapfile -t test_projects < <(find . -name '*.csproj' -print0 | xargs -0 grep -l 'Microsoft.NET.Test.Sdk' || true)
+          if [ ${#test_projects[@]} -eq 0 ]; then
+            echo "::warning::Aucun projet de test n'existe encore. Étape ignorée."
+          else
+            dotnet test GaiaLife.sln --configuration Release --no-build --verbosity normal
+          fi
+
+      - name: Build Docker image
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          docker build -t "gaia-life:${SHORT_SHA}" .
+          echo "Image taguée gaia-life:${SHORT_SHA} (aucun push registre pour le moment)."

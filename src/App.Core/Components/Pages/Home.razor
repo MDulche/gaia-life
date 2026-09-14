@@ -1,0 +1,95 @@
+﻿@page "/"
+@using System.Globalization
+@using System.Security.Claims
+
+<PageTitle>Accueil</PageTitle>
+
+@if (_loading)
+{
+    <p class="text-muted">Chargement…</p>
+}
+else
+{
+    <header class="mb-4">
+        <h1 class="h3 mb-1">Accueil</h1>
+        <p class="text-muted mb-0">Bonjour @_userName — @_today</p>
+    </header>
+
+    @if (_activeModules.Count == 0)
+    {
+        <div class="empty-modules d-flex flex-column align-items-center justify-content-center text-center py-5">
+            <p class="fs-5 mb-3">Aucun module actif pour le moment.</p>
+            <button type="button" class="btn btn-primary" @onclick="GoToAdmin">Aller à l'administration</button>
+        </div>
+    }
+    else
+    {
+        @if (_widgetModules.Count > 0)
+        {
+            <section class="mb-5">
+                <h2 class="h5 mb-3">Widgets</h2>
+                <div class="widgets-grid">
+                    @foreach (var module in _widgetModules)
+                    {
+                        <div class="widget-card card shadow-sm">
+                            <div class="card-body">
+                                <DynamicComponent Type="module.HomeWidgetComponent" />
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <section>
+            <h2 class="h5 mb-3">Raccourcis</h2>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var module in _activeModules)
+                {
+                    <button type="button" class="btn btn-outline-primary" @onclick="() => OpenModule(module)">
+                        <span class="me-1">@module.Icon</span>
+                        @module.DisplayName
+                    </button>
+                }
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    [Inject]
+    private ModuleManager ModuleManager { get; set; } = default!;
+
+    [Inject]
+    private AppDbContext Db { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    private bool _loading = true;
+    private string _userName = "utilisateur";
+    private string _today = string.Empty;
+    private IReadOnlyList<IAppModule> _activeModules = [];
+    private IReadOnlyList<IAppModule> _widgetModules = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateTask;
+        _userName = authState.User.Identity?.Name
+            ?? authState.User.FindFirst(ClaimTypes.Email)?.Value
+            ?? "utilisateur";
+        _today = DateTime.Now.ToString("D", CultureInfo.GetCultureInfo("fr-FR"));
+
+        var activeKeys = await ModuleManager.GetActiveModuleKeysAsync(Db);
+        _activeModules = ModuleManager.GetActiveModules(activeKeys);
+        _widgetModules = _activeModules.Where(m => m.HomeWidgetComponent is not null).ToList();
+        _loading = false;
+    }
+
+    private void GoToAdmin() => Navigation.NavigateTo("/admin");
+
+    private void OpenModule(IAppModule module) => Navigation.NavigateTo(module.RootRoute);
+}

@@ -1,0 +1,278 @@
+@page "/admin"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Administration</PageTitle>
+
+<h1 class="h3 mb-4">Administration</h1>
+
+@if (!string.IsNullOrEmpty(_toastMessage))
+{
+    <div class="alert @_toastCss alert-dismissible fade show" role="status">
+        @_toastMessage
+        <button type="button" class="btn-close" aria-label="Fermer" @onclick="DismissToast"></button>
+    </div>
+}
+
+<section class="mb-5">
+    <h2 class="h5 mb-3">Modules</h2>
+    @if (ModuleManager.AllModules.Count == 0)
+    {
+        <p class="text-muted">Aucun module enregistré pour le moment.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Icône</th>
+                        <th>Nom</th>
+                        <th>Clé technique</th>
+                        <th>État</th>
+                        <th>Activer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var module in ModuleManager.AllModules)
+                    {
+                        var isActive = _activeKeys.Contains(module.Key);
+                        <tr>
+                            <td>@module.Icon</td>
+                            <td>@module.DisplayName</td>
+                            <td><code>@module.Key</code></td>
+                            <td>
+                                @if (isActive)
+                                {
+                                    <span class="badge text-bg-success">Actif</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-secondary">Inactif</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           role="switch"
+                                           checked="@isActive"
+                                           disabled="@_busy"
+                                           @onchange="async _ => await ToggleModuleAsync(module, !isActive)" />
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="mb-5">
+    <h2 class="h5 mb-3">Utilisateurs</h2>
+    @if (_users.Count == 0)
+    {
+        <p class="text-muted">Aucun compte pour le moment. Le compte administrateur peut être créé via le seed de démarrage ou directement en base.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>E-mail</th>
+                        <th>Rôle actuel</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in _users)
+                    {
+                        <tr>
+                            <td>@user.Email</td>
+                            <td>
+                                <select class="form-select form-select-sm"
+                                        style="max-width: 12rem;"
+                                        value="@user.Role"
+                                        disabled="@_busy"
+                                        @onchange="e => ChangeRoleAsync(user, e.Value?.ToString())">
+                                    @foreach (var role in AppRoles.All)
+                                    {
+                                        <option value="@role">@role</option>
+                                    }
+                                </select>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section>
+    <h2 class="h5 mb-3">Système</h2>
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Environnement</dt>
+        <dd class="col-sm-9"><code>@HostEnvironment.EnvironmentName</code></dd>
+        <dt class="col-sm-3">Base de données</dt>
+        <dd class="col-sm-9">
+            @if (_dbOk)
+            {
+                <span class="text-success fw-semibold">Connecté</span>
+            }
+            else
+            {
+                <span class="text-danger fw-semibold">Erreur</span>
+                @if (!string.IsNullOrEmpty(_dbError))
+                {
+                    <div class="small text-danger mt-1">@_dbError</div>
+                }
+            }
+        </dd>
+    </dl>
+</section>
+
+@code {
+    [Inject] private ModuleManager ModuleManager { get; set; } = default!;
+    [Inject] private AppDbContext Db { get; set; } = default!;
+    [Inject] private UserManager<IdentityUser> UserManager { get; set; } = default!;
+    [Inject] private IWebHostEnvironment HostEnvironment { get; set; } = default!;
+
+    private ISet<string> _activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private List<UserRow> _users = [];
+    private bool _busy;
+    private bool _dbOk;
+    private string? _dbError;
+    private string? _toastMessage;
+    private string _toastCss = "alert-success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadModulesAsync();
+        await LoadUsersAsync();
+        await CheckDatabaseAsync();
+    }
+
+    private async Task ReloadModulesAsync()
+    {
+        _activeKeys = await ModuleManager.GetActiveModuleKeysAsync(Db);
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        var users = await UserManager.Users.OrderBy(u => u.Email).ToListAsync();
+        var rows = new List<UserRow>(users.Count);
+        foreach (var user in users)
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            rows.Add(new UserRow
+            {
+                Id = user.Id,
+                Email = user.Email ?? user.UserName ?? user.Id,
+                Role = roles.FirstOrDefault() ?? AppRoles.Lecture
+            });
+        }
+
+        _users = rows;
+    }
+
+    private async Task CheckDatabaseAsync()
+    {
+        try
+        {
+            await Db.Database.ExecuteSqlRawAsync("SELECT 1");
+            _dbOk = true;
+            _dbError = null;
+        }
+        catch (Exception ex)
+        {
+            _dbOk = false;
+            _dbError = ex.Message;
+        }
+    }
+
+    private async Task ToggleModuleAsync(IAppModule module, bool isActive)
+    {
+        _busy = true;
+        try
+        {
+            await ModuleManager.SetModuleActiveAsync(Db, module.Key, isActive);
+            await ReloadModulesAsync();
+            ShowToast(isActive
+                ? $"Le module « {module.DisplayName} » est maintenant actif."
+                : $"Le module « {module.DisplayName} » est maintenant inactif.");
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Impossible de mettre à jour le module : {ex.Message}", success: false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ChangeRoleAsync(UserRow row, string? newRole)
+    {
+        if (string.IsNullOrWhiteSpace(newRole) || newRole == row.Role || !AppRoles.All.Contains(newRole))
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var user = await UserManager.FindByIdAsync(row.Id);
+            if (user is null)
+            {
+                ShowToast("Utilisateur introuvable.", success: false);
+                return;
+            }
+
+            var currentRoles = await UserManager.GetRolesAsync(user);
+            if (currentRoles.Count > 0)
+            {
+                var removeResult = await UserManager.RemoveFromRolesAsync(user, currentRoles);
+                if (!removeResult.Succeeded)
+                {
+                    ShowToast("Impossible de retirer le rôle actuel.", success: false);
+                    return;
+                }
+            }
+
+            var addResult = await UserManager.AddToRoleAsync(user, newRole);
+            if (!addResult.Succeeded)
+            {
+                ShowToast("Impossible d'assigner le nouveau rôle.", success: false);
+                return;
+            }
+
+            row.Role = newRole;
+            ShowToast($"Le rôle de {row.Email} est maintenant {newRole}.");
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Impossible de changer le rôle : {ex.Message}", success: false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ShowToast(string message, bool success = true)
+    {
+        _toastMessage = message;
+        _toastCss = success ? "alert-success" : "alert-danger";
+    }
+
+    private void DismissToast() => _toastMessage = null;
+
+    private sealed class UserRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = AppRoles.Lecture;
+    }
+}

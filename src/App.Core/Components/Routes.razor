@@ -1,0 +1,21 @@
+﻿<Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="new[] { typeof(global::App.Shared.AssemblyMarker).Assembly }">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <RedirectToLogin />
+                }
+                else
+                {
+                    <LayoutView Layout="typeof(MainLayout)">
+                        <div class="alert alert-warning" role="alert">
+                            Accès refusé. Vous n'avez pas les droits nécessaires pour cette page.
+                        </div>
+                    </LayoutView>
+                }
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

@@ -1,0 +1,13 @@
+@page "/Account/AccessDenied"
+@layout global::App.Core.Components.Layout.AccountLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>Accès refusé</PageTitle>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <h2 class="h5">Accès refusé</h2>
+        <p class="mb-3">Vous n'avez pas les droits nécessaires pour cette ressource.</p>
+        <a class="btn btn-primary" href="/">Retour à l'accueil</a>
+    </div>
+</div>

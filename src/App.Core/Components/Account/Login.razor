@@ -1,0 +1,162 @@
+@page "/Account/Login"
+@layout global::App.Core.Components.Layout.AccountLayout
+@attribute [AllowAnonymous]
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>Connexion</PageTitle>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <h2 class="h5 mb-3">Connexion</h2>
+        <p class="text-muted small">L'inscription publique n'est pas disponible. Contactez un administrateur pour obtenir un compte.</p>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">@_errorMessage</div>
+        }
+
+        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+
+            <div class="mb-3">
+                <label for="email" class="form-label">E-mail</label>
+                <InputText @bind-Value="Input.Email" id="email" class="form-control" autocomplete="username" />
+                <ValidationMessage For="() => Input.Email" class="text-danger" />
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Mot de passe</label>
+                <InputText type="password" @bind-Value="Input.Password" id="password" class="form-control" autocomplete="current-password" />
+                <ValidationMessage For="() => Input.Password" class="text-danger" />
+            </div>
+
+            <div class="form-check mb-3">
+                <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" id="remember" />
+                <label class="form-check-label" for="remember">Se souvenir de moi</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Se connecter</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [Inject]
+    private SignInManager<IdentityUser> SignInManager { get; set; } = default!;
+
+    [Inject]
+    private UserManager<IdentityUser> UserManager { get; set; } = default!;
+
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+
+    [Inject]
+    private IConfiguration Configuration { get; set; } = default!;
+
+    [Inject]
+    private IWebHostEnvironment HostEnvironment { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        PrefillDevCredentials();
+
+        if (HttpContext.Request.Method == HttpMethods.Get
+            && HttpContext.User.Identity?.IsAuthenticated == true)
+        {
+            NavigationManager.NavigateTo(GetSafeReturnUrl(ReturnUrl), forceLoad: true);
+        }
+    }
+
+    private void PrefillDevCredentials()
+    {
+        if (!HostEnvironment.IsDevelopment() || !string.IsNullOrEmpty(Input.Email))
+        {
+            return;
+        }
+
+        Input.Email = Configuration["SeedAdmin:Email"] ?? string.Empty;
+        Input.Password = Configuration["SeedAdmin:Password"] ?? string.Empty;
+        Input.RememberMe = true;
+    }
+
+    public async Task LoginUser()
+    {
+        var userName = Input.Email;
+        var user = await UserManager.FindByEmailAsync(Input.Email);
+        if (user?.UserName is not null)
+        {
+            userName = user.UserName;
+        }
+
+        var result = await SignInManager.PasswordSignInAsync(
+            userName,
+            Input.Password,
+            Input.RememberMe,
+            lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            NavigationManager.NavigateTo(GetSafeReturnUrl(ReturnUrl), forceLoad: true);
+            return;
+        }
+
+        _errorMessage = "Identifiants invalides.";
+    }
+
+    private string GetSafeReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return "/";
+        }
+
+        if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var absolute))
+        {
+            if (!absolute.ToString().StartsWith(NavigationManager.BaseUri, StringComparison.OrdinalIgnoreCase))
+            {
+                return "/";
+            }
+
+            returnUrl = absolute.PathAndQuery;
+        }
+
+        if (!returnUrl.StartsWith('/'))
+        {
+            return "/";
+        }
+
+        var path = returnUrl.Split('?', '#')[0];
+        if (path.Equals("/Account", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/Account/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/";
+        }
+
+        return returnUrl;
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "L'e-mail est obligatoire.")]
+        [EmailAddress(ErrorMessage = "E-mail invalide.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Le mot de passe est obligatoire.")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = string.Empty;
+
+        public bool RememberMe { get; set; }
+    }
+}
