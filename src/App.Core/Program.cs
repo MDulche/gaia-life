@@ -2,6 +2,8 @@ using System.Globalization;
 using App.Core.Data;
 using App.Core.Identity;
 using App.Core.Modules;
+using App.Modules.Finance;
+using App.Shared.Modules;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -14,11 +16,12 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("La chaîne de connexion 'Default' est introuvable.");
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(
-        connectionString,
-        ServerVersion.AutoDetect(connectionString),
-        mysql => mysql.EnableRetryOnFailure()));
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
+    AppDbContextConfiguration.Configure(options, connectionString));
+builder.Services.AddDbContext<AppDbContext>(
+    options => AppDbContextConfiguration.Configure(options, connectionString),
+    contextLifetime: ServiceLifetime.Scoped,
+    optionsLifetime: ServiceLifetime.Singleton);
 
 builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
     {
@@ -56,9 +59,11 @@ builder.Services.AddDataProtection()
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddScoped<IActiveModuleGuard, ActiveModuleGuard>();
+
 var moduleManager = new ModuleManager();
-// Phase 2 : moduleManager.Register(new FinanceModule());
-// Phase 2 : moduleManager.Register(new TravailModule());
+moduleManager.Register(new FinanceModule());
+// Phase 3 : moduleManager.Register(new TravailModule());
 moduleManager.ConfigureAllServices(builder.Services);
 builder.Services.AddSingleton(moduleManager);
 
@@ -86,15 +91,21 @@ if (!string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAIN
 }
 
 app.UseAuthentication();
-app.UseDevAutoLogin();
+if (app.Environment.IsDevelopment())
+{
+    app.UseDevAutoLogin();
+}
 app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<global::App.Core.Components.App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(typeof(global::App.Shared.AssemblyMarker).Assembly);
+    .AddAdditionalAssemblies(
+        typeof(global::App.Shared.AssemblyMarker).Assembly,
+        typeof(FinanceModule).Assembly);
 
 await IdentitySeeder.SeedAsync(app.Services);
+await FinanceModule.MigrateAsync(app.Services);
 
 app.Run();

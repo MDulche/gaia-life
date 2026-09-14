@@ -18,7 +18,7 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             ?? "Server=localhost;Port=3306;Database=gaia_life;User=gaia;Password=changeme";
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseMySql(connectionString, new MariaDbServerVersion(new Version(11, 6, 0)));
+        AppDbContextConfiguration.Configure(optionsBuilder, connectionString);
 
         return new AppDbContext(optionsBuilder.Options);
     }

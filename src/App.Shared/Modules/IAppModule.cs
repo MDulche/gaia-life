@@ -1,4 +1,6 @@
-namespace App.Core.Modules;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace App.Shared.Modules;
 
 public interface IAppModule
 {

@@ -1,0 +1,51 @@
+@using System.Globalization
+@inject FinanceService Finance
+
+<div>
+    <h3 class="h6 text-muted mb-2">
+        <span class="module-icon bi-cash-coin me-1" aria-hidden="true"></span>
+        Finances
+    </h3>
+    @if (_loading)
+    {
+        <p class="text-muted mb-0">Chargement…</p>
+    }
+    else
+    {
+        <p class="fs-4 mb-3">@FinanceFormat.Euro(_soldeTotal)</p>
+        @if (_dernieres.Count == 0)
+        {
+            <p class="text-muted small mb-0">Aucune transaction récente.</p>
+        }
+        else
+        {
+            <ul class="list-unstyled mb-0 small">
+                @foreach (var tx in _dernieres)
+                {
+                    <li class="d-flex justify-content-between gap-2 mb-1">
+                        <span>
+                            @tx.Date.ToString("d", CultureInfo.GetCultureInfo("fr-FR"))
+                            · @tx.Categorie
+                        </span>
+                        <span class="@(tx.Type == TypeTransaction.Entree ? "finance-amount-in" : "finance-amount-out")">
+                            @FinanceFormat.Signed(tx.Type, tx.Montant)
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private decimal _soldeTotal;
+    private List<Transaction> _dernieres = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _soldeTotal = await Finance.SoldeTotalAsync();
+        _dernieres = await Finance.DernieresTransactionsAsync(3);
+        _loading = false;
+    }
+}

@@ -84,3 +84,48 @@ h1:focus {
 .empty-modules {
     min-height: 40vh;
 }
+
+.module-icon {
+    display: inline-block;
+    width: 1.15rem;
+    height: 1.15rem;
+    vertical-align: -0.2em;
+    background-color: currentColor;
+    -webkit-mask: var(--module-icon) center / contain no-repeat;
+    mask: var(--module-icon) center / contain no-repeat;
+}
+
+.module-icon.bi-cash-coin {
+    --module-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8'/%3E%3Cpath d='M6.25 4.5h2.4a2 2 0 0 1 0 4H7.25v1h1.9a.75.75 0 0 1 0 1.5h-1.9V12a.75.75 0 0 1-1.5 0v-1h-1.2a.75.75 0 0 1 0-1.5h1.2v-1h-1.4a.75.75 0 0 1 0-1.5h1.4v-1h-1.15a.75.75 0 0 1 0-1.5'/%3E%3C/svg%3E");
+}
+
+.finance-amount-in {
+    color: #198754;
+    font-weight: 600;
+}
+
+.finance-amount-out {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.finance-chart {
+    width: 100%;
+    max-width: 36rem;
+}
+
+.finance-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.finance-legend-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}

@@ -9,12 +9,16 @@ public static class IdentitySeeder
     public static async Task SeedAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.MigrateAsync();
+        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            await db.Database.MigrateAsync();
+        }
 
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var environment = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("IdentitySeeder");
 
         foreach (var roleName in AppRoles.All)
@@ -30,41 +34,66 @@ public static class IdentitySeeder
             }
         }
 
-        var adminEmail = configuration["SeedAdmin:Email"];
-        var adminPassword = configuration["SeedAdmin:Password"];
-        if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+        if (!environment.IsDevelopment())
         {
             return;
         }
 
-        var existingAdmin = await userManager.FindByEmailAsync(adminEmail);
-        if (existingAdmin is not null)
+        await EnsureDevelopmentUserAsync(
+            userManager,
+            logger,
+            SeedConfiguration.GetAdminEmail(configuration),
+            SeedConfiguration.GetAdminPassword(configuration),
+            AppRoles.Admin);
+
+        await EnsureDevelopmentUserAsync(
+            userManager,
+            logger,
+            SeedConfiguration.GetTestEmail(configuration),
+            SeedConfiguration.GetTestPassword(configuration),
+            AppRoles.Membre);
+    }
+
+    private static async Task EnsureDevelopmentUserAsync(
+        UserManager<IdentityUser> userManager,
+        ILogger logger,
+        string? email,
+        string? password,
+        string role)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
             return;
         }
 
-        var admin = new IdentityUser
+        var existing = await userManager.FindByEmailAsync(email);
+        if (existing is not null)
         {
-            UserName = adminEmail,
-            Email = adminEmail,
+            return;
+        }
+
+        var user = new IdentityUser
+        {
+            UserName = email,
+            Email = email,
             EmailConfirmed = true
         };
 
-        var createResult = await userManager.CreateAsync(admin, adminPassword);
+        var createResult = await userManager.CreateAsync(user, password);
         if (!createResult.Succeeded)
         {
             throw new InvalidOperationException(
-                $"Impossible de créer le compte administrateur : {FormatErrors(createResult)}");
+                $"Impossible de créer le compte '{email}' : {FormatErrors(createResult)}");
         }
 
-        var roleResult = await userManager.AddToRoleAsync(admin, AppRoles.Admin);
+        var roleResult = await userManager.AddToRoleAsync(user, role);
         if (!roleResult.Succeeded)
         {
             throw new InvalidOperationException(
-                $"Impossible d'assigner le rôle Admin : {FormatErrors(roleResult)}");
+                $"Impossible d'assigner le rôle {role} à '{email}' : {FormatErrors(roleResult)}");
         }
 
-        logger.LogInformation("Compte administrateur initial créé pour {Email}.", adminEmail);
+        logger.LogInformation("Compte de développement créé pour {Email} ({Role}).", email, role);
     }
 
     private static string FormatErrors(IdentityResult result) =>

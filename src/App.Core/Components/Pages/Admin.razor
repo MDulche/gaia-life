@@ -16,29 +16,31 @@
 
 <section class="mb-5">
     <h2 class="h5 mb-3">Modules</h2>
-    @if (ModuleManager.AllModules.Count == 0)
-    {
-        <p class="text-muted">Aucun module enregistré pour le moment.</p>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-striped align-middle">
-                <thead>
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Icône</th>
+                    <th>Nom</th>
+                    <th>Clé technique</th>
+                    <th>État</th>
+                    <th>Activer</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (ModuleManager.AllModules.Count == 0)
+                {
                     <tr>
-                        <th>Icône</th>
-                        <th>Nom</th>
-                        <th>Clé technique</th>
-                        <th>État</th>
-                        <th>Activer</th>
+                        <td colspan="5" class="text-muted text-center">Aucun module enregistré pour le moment.</td>
                     </tr>
-                </thead>
-                <tbody>
+                }
+                else
+                {
                     @foreach (var module in ModuleManager.AllModules)
                     {
                         var isActive = _activeKeys.Contains(module.Key);
                         <tr>
-                            <td>@module.Icon</td>
+                            <td><span class="module-icon @module.Icon" title="@module.Icon" aria-hidden="true"></span></td>
                             <td>@module.DisplayName</td>
                             <td><code>@module.Key</code></td>
                             <td>
@@ -63,10 +65,10 @@
                             </td>
                         </tr>
                     }
-                </tbody>
-            </table>
-        </div>
-    }
+                }
+            </tbody>
+        </table>
+    </div>
 </section>
 
 <section class="mb-5">
@@ -135,7 +137,7 @@
 
 @code {
     [Inject] private ModuleManager ModuleManager { get; set; } = default!;
-    [Inject] private AppDbContext Db { get; set; } = default!;
+    [Inject] private IDbContextFactory<AppDbContext> DbFactory { get; set; } = default!;
     [Inject] private UserManager<IdentityUser> UserManager { get; set; } = default!;
     [Inject] private IWebHostEnvironment HostEnvironment { get; set; } = default!;
 
@@ -156,7 +158,8 @@
 
     private async Task ReloadModulesAsync()
     {
-        _activeKeys = await ModuleManager.GetActiveModuleKeysAsync(Db);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db);
     }
 
     private async Task LoadUsersAsync()
@@ -181,7 +184,8 @@
     {
         try
         {
-            await Db.Database.ExecuteSqlRawAsync("SELECT 1");
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await db.Database.ExecuteSqlRawAsync("SELECT 1");
             _dbOk = true;
             _dbError = null;
         }
@@ -197,7 +201,8 @@
         _busy = true;
         try
         {
-            await ModuleManager.SetModuleActiveAsync(Db, module.Key, isActive);
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await ModuleManager.SetModuleActiveAsync(db, module.Key, isActive);
             await ReloadModulesAsync();
             ShowToast(isActive
                 ? $"Le module « {module.DisplayName} » est maintenant actif."

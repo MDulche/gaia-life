@@ -4,6 +4,13 @@
 
 <PageTitle>Accueil</PageTitle>
 
+@if (Notice == "module-disabled")
+{
+    <div class="alert alert-warning" role="status">
+        Ce module n'est pas actif. Un administrateur peut l'activer depuis la page Administration.
+    </div>
+}
+
 @if (_loading)
 {
     <p class="text-muted">Chargement…</p>
@@ -47,7 +54,7 @@ else
                 @foreach (var module in _activeModules)
                 {
                     <button type="button" class="btn btn-outline-primary" @onclick="() => OpenModule(module)">
-                        <span class="me-1">@module.Icon</span>
+                        <span class="module-icon @module.Icon me-1" aria-hidden="true"></span>
                         @module.DisplayName
                     </button>
                 }
@@ -64,10 +71,13 @@ else
     private ModuleManager ModuleManager { get; set; } = default!;
 
     [Inject]
-    private AppDbContext Db { get; set; } = default!;
+    private IDbContextFactory<AppDbContext> DbFactory { get; set; } = default!;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? Notice { get; set; }
 
     private bool _loading = true;
     private string _userName = "utilisateur";
@@ -83,7 +93,8 @@ else
             ?? "utilisateur";
         _today = DateTime.Now.ToString("D", CultureInfo.GetCultureInfo("fr-FR"));
 
-        var activeKeys = await ModuleManager.GetActiveModuleKeysAsync(Db);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db);
         _activeModules = ModuleManager.GetActiveModules(activeKeys);
         _widgetModules = _activeModules.Where(m => m.HomeWidgetComponent is not null).ToList();
         _loading = false;

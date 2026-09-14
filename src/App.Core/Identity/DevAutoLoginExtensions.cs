@@ -21,8 +21,8 @@ public static class DevAutoLoginExtensions
                 return;
             }
 
-            var email = configuration["SeedAdmin:Email"];
-            var password = configuration["SeedAdmin:Password"];
+            var email = SeedConfiguration.GetAdminEmail(configuration);
+            var password = SeedConfiguration.GetAdminPassword(configuration);
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
             {
                 await next();

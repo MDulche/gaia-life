@@ -24,9 +24,11 @@ services:
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
       DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER: "true"
       ConnectionStrings__Default: Server=mariadb;Port=3306;Database=${DB_NAME:-gaia_life};User=gaia;Password=${DB_PASSWORD:-changeme}
-      SeedAdmin__Email: admin@gaia.local
-      SeedAdmin__Password: Admin123!
+      SeedAdmin__Email: ${SEED_ADMIN_EMAIL:-admin@gaia.local}
+      SeedAdmin__Password: ${SEED_ADMIN_PASSWORD}
       SeedAdmin__AutoLogin: "true"
+      SeedTest__Email: ${SEED_TEST_EMAIL:-test@gaia.local}
+      SeedTest__Password: ${SEED_TEST_PASSWORD}
     depends_on:
       mariadb:
         condition: service_healthy

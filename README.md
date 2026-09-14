@@ -14,9 +14,8 @@ cp .env.dev.example .env.dev
 docker compose --env-file .env.dev -f docker-compose.dev.yml up
 ```
 
-Compte administrateur de développement (créé au premier démarrage si absent) :
+Compte administrateur de développement (créé au premier démarrage si absent, **uniquement** si `ASPNETCORE_ENVIRONMENT=Development`) :
 
-- e-mail : `admin@gaia.local`
-- mot de passe : `Admin123!`
+Les identifiants viennent de `.env.dev` (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`), jamais du code C#.
 
 La documentation de déploiement se trouve dans [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).

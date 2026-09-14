@@ -1,0 +1,52 @@
+using App.Modules.Finance.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace App.Modules.Finance.Data;
+
+public class FinanceDbContext : DbContext
+{
+    public FinanceDbContext(DbContextOptions<FinanceDbContext> options)
+        : base(options)
+    {
+    }
+
+    public DbSet<Compte> Comptes => Set<Compte>();
+
+    public DbSet<Transaction> Transactions => Set<Transaction>();
+
+    public DbSet<Categorie> Categories => Set<Categorie>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Compte>(entity =>
+        {
+            entity.ToTable("Comptes");
+            entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.SoldeInitial).HasPrecision(18, 2);
+            entity.HasMany(e => e.Transactions)
+                .WithOne(e => e.Compte)
+                .HasForeignKey(e => e.CompteId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Transaction>(entity =>
+        {
+            entity.ToTable("Transactions");
+            entity.Property(e => e.Montant).HasPrecision(18, 2);
+            entity.Property(e => e.Categorie).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Note).HasMaxLength(500);
+            entity.Property(e => e.Type)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+            entity.HasIndex(e => new { e.CompteId, e.Date });
+        });
+
+        modelBuilder.Entity<Categorie>(entity =>
+        {
+            entity.ToTable("Categories");
+            entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Couleur).HasMaxLength(16);
+            entity.HasIndex(e => e.Nom).IsUnique();
+        });
+    }
+}

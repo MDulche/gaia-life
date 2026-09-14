@@ -86,8 +86,8 @@
             return;
         }
 
-        Input.Email = Configuration["SeedAdmin:Email"] ?? string.Empty;
-        Input.Password = Configuration["SeedAdmin:Password"] ?? string.Empty;
+        Input.Email = SeedConfiguration.GetAdminEmail(Configuration) ?? string.Empty;
+        Input.Password = SeedConfiguration.GetAdminPassword(Configuration) ?? string.Empty;
         Input.RememberMe = true;
     }
 

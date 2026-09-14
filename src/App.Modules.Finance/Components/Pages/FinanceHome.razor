@@ -1,0 +1,150 @@
+@page "/finance"
+@attribute [Authorize]
+@inject FinanceService Finance
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Finances</PageTitle>
+
+@if (_ready)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h1 class="h3 mb-0">Finances</h1>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="/finance/synthese">Synthèse</a>
+            <button type="button" class="btn btn-primary" @onclick="() => _showNewAccount = !_showNewAccount">
+                Ajouter un compte
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    @if (_showNewAccount)
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h2 class="h6 mb-3">Nouveau compte</h2>
+                <EditForm Model="_newAccount" OnValidSubmit="CreateAccountAsync">
+                    <DataAnnotationsValidator />
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label" for="compte-nom">Nom</label>
+                            <InputText id="compte-nom" class="form-control" @bind-Value="_newAccount.Nom" />
+                            <ValidationMessage For="() => _newAccount.Nom" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="compte-solde">Solde initial (€)</label>
+                            <InputNumber id="compte-solde" class="form-control" @bind-Value="_newAccount.SoldeInitial" />
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Créer</button>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    @if (_rows.Count == 0)
+    {
+        <p class="text-muted">Aucun compte pour le moment. Créez-en un pour commencer.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Compte</th>
+                        <th class="text-end">Solde actuel</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td>
+                                <a href="@($"/finance/comptes/{row.Id}")">@row.Nom</a>
+                            </td>
+                            <td class="text-end">@FinanceFormat.Euro(row.Solde)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>Total</th>
+                        <th class="text-end">@FinanceFormat.Euro(_rows.Sum(r => r.Solde))</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private bool _ready;
+    private bool _busy;
+    private bool _showNewAccount;
+    private string? _error;
+    private List<CompteRow> _rows = [];
+    private NewAccountModel _newAccount = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await FinanceAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        var comptes = await Finance.ListerComptesAsync();
+        var rows = new List<CompteRow>(comptes.Count);
+        foreach (var compte in comptes)
+        {
+            rows.Add(new CompteRow(compte.Id, compte.Nom, await Finance.SoldeActuel(compte.Id)));
+        }
+
+        _rows = rows;
+    }
+
+    private async Task CreateAccountAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Finance.AjouterCompteAsync(_newAccount.Nom, _newAccount.SoldeInitial);
+            _newAccount = new NewAccountModel();
+            _showNewAccount = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed record CompteRow(int Id, string Nom, decimal Solde);
+
+    private sealed class NewAccountModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128)]
+        public string Nom { get; set; } = string.Empty;
+
+        public decimal SoldeInitial { get; set; }
+    }
+}

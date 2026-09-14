@@ -1,4 +1,5 @@
 using App.Core.Data;
+using App.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace App.Core.Modules;

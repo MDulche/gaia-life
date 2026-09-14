@@ -1,0 +1,215 @@
+@page "/finance/comptes/{Id:int}"
+@attribute [Authorize]
+@inject FinanceService Finance
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Compte</PageTitle>
+
+@if (_ready && _compte is not null)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+            <p class="mb-1"><a href="/finance">← Finances</a></p>
+            <h1 class="h3 mb-1">@_compte.Nom</h1>
+            <p class="text-muted mb-0">Solde actuel : <strong>@FinanceFormat.Euro(_solde)</strong></p>
+        </div>
+        <button type="button" class="btn btn-primary" @onclick="GoToNewTransaction">Ajouter une transaction</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    @if (_pendingDelete is not null)
+    {
+        <div class="alert alert-warning" role="alertdialog">
+            <p class="mb-2">Supprimer la transaction du @_pendingDelete.Date.ToString("d") (@FinanceFormat.Signed(_pendingDelete.Type, _pendingDelete.Montant)) ?</p>
+            <button type="button" class="btn btn-danger btn-sm me-2" @onclick="ConfirmDeleteAsync" disabled="@_busy">Confirmer</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _pendingDelete = null">Annuler</button>
+        </div>
+    }
+
+    <form class="row g-2 align-items-end mb-3" @onsubmit="ApplyFiltersAsync" @onsubmit:preventDefault="true">
+        <div class="col-md-3">
+            <label class="form-label" for="filtre-debut">Du</label>
+            <InputDate id="filtre-debut" class="form-control" @bind-Value="_filtreDebut" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="filtre-fin">Au</label>
+            <InputDate id="filtre-fin" class="form-control" @bind-Value="_filtreFin" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="filtre-categorie">Catégorie</label>
+            <InputSelect id="filtre-categorie" class="form-select" @bind-Value="_filtreCategorie">
+                <option value="">Toutes</option>
+                @foreach (var categorie in _categories)
+                {
+                    <option value="@categorie.Nom">@categorie.Nom</option>
+                }
+            </InputSelect>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-outline-primary">Filtrer</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>
+                        <button type="button" class="btn btn-link p-0" @onclick="ToggleSort">
+                            Date @(_dateDesc ? "↓" : "↑")
+                        </button>
+                    </th>
+                    <th>Catégorie</th>
+                    <th>Note</th>
+                    <th class="text-end">Montant</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="text-muted text-center">Aucune transaction.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var tx in _items)
+                    {
+                        <tr>
+                            <td>@tx.Date.ToString("d")</td>
+                            <td>@tx.Categorie</td>
+                            <td>@(tx.Note ?? "—")</td>
+                            <td class="text-end @(tx.Type == TypeTransaction.Entree ? "finance-amount-in" : "finance-amount-out")">
+                                @FinanceFormat.Signed(tx.Type, tx.Montant)
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <a class="btn btn-sm btn-outline-secondary" href="@($"/finance/comptes/{Id}/transactions/{tx.Id}")">Modifier</a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _pendingDelete = tx">Supprimer</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_totalPages > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center">
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_page <= 1)" @onclick="() => ChangePage(-1)">Précédent</button>
+            <span class="small text-muted">Page @_page / @_totalPages</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_page >= _totalPages)" @onclick="() => ChangePage(1)">Suivant</button>
+        </div>
+    }
+}
+else if (_ready)
+{
+    <p class="text-muted">Compte introuvable. <a href="/finance">Retour</a></p>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private const int PageSize = 10;
+    private bool _ready;
+    private bool _busy;
+    private bool _dateDesc = true;
+    private int _page = 1;
+    private int _total;
+    private Compte? _compte;
+    private decimal _solde;
+    private string? _error;
+    private DateTime? _filtreDebut;
+    private DateTime? _filtreFin;
+    private string _filtreCategorie = string.Empty;
+    private List<Categorie> _categories = [];
+    private IReadOnlyList<Transaction> _items = [];
+    private Transaction? _pendingDelete;
+
+    private int _totalPages => Math.Max(1, (int)Math.Ceiling(_total / (double)PageSize));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await FinanceAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        _page = 1;
+        await ReloadAsync();
+    }
+
+    private async Task ToggleSort()
+    {
+        _dateDesc = !_dateDesc;
+        _page = 1;
+        await ReloadAsync();
+    }
+
+    private async Task ChangePage(int delta)
+    {
+        _page = Math.Clamp(_page + delta, 1, _totalPages);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _error = null;
+        _compte = await Finance.GetCompteAsync(Id);
+        if (_compte is null)
+        {
+            return;
+        }
+
+        _solde = await Finance.SoldeActuel(Id);
+        _categories = await Finance.ListerCategoriesAsync();
+        var skip = (_page - 1) * PageSize;
+        (_items, _total) = await Finance.ListerTransactionsPaged(
+            Id,
+            _filtreDebut,
+            _filtreFin,
+            string.IsNullOrWhiteSpace(_filtreCategorie) ? null : _filtreCategorie,
+            _dateDesc,
+            skip,
+            PageSize);
+    }
+
+    private void GoToNewTransaction() => Navigation.NavigateTo($"/finance/comptes/{Id}/transactions/nouvelle");
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await Finance.SupprimerTransaction(_pendingDelete.Id);
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
