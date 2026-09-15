@@ -1,7 +1,9 @@
 @page "/admin"
 @* Administration : activer les modules, changer les rôles, sonder MariaDB. Réservé au rôle Admin. *@
 @attribute [Authorize(Roles = AppRoles.Admin)]
+@using System.Globalization
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Diagnostics.HealthChecks
 
 <PageTitle>Administration</PageTitle>
 
@@ -113,6 +115,108 @@
     }
 </section>
 
+<section class="mb-5">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h2 class="h5 mb-0">Supervision</h2>
+        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="RefreshSupervisionAsync">
+            Rafraîchir
+        </button>
+    </div>
+    @if (_supervisionAt is not null)
+    {
+        <p class="text-muted small mb-3">Dernière lecture @_supervisionAt.Value.ToLocalTime().ToString("G", CultureInfo.GetCultureInfo("fr-FR"))</p>
+    }
+
+    <h3 class="h6">Health checks</h3>
+    @if (_health is null)
+    {
+        <p class="text-muted">Aucun rapport pour le moment.</p>
+    }
+    else
+    {
+        <div class="table-responsive mb-4">
+            <table class="table table-sm table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Nom</th>
+                        <th>Statut</th>
+                        <th>Détail</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _health.Entries)
+                    {
+                        <tr>
+                            <td><code>@entry.Key</code></td>
+                            <td><span class="badge @HealthBadgeClass(entry.Value.Status)">@HealthLabel(entry.Value.Status)</span></td>
+                            <td class="small">@(entry.Value.Description ?? entry.Value.Exception?.Message ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <h3 class="h6">Sauvegardes</h3>
+    @if (_backups is null)
+    {
+        <p class="text-muted">Dossier de sauvegarde illisible.</p>
+    }
+    else
+    {
+        <dl class="row mb-4">
+            <dt class="col-sm-4">Dossier</dt>
+            <dd class="col-sm-8"><code>@_backups.Path</code></dd>
+            <dt class="col-sm-4">Taille</dt>
+            <dd class="col-sm-8">@DiskSpaceHealthCheck.FormatSize(_backups.TotalBytes)</dd>
+            <dt class="col-sm-4">Fichiers quotidien_*.sql.gz</dt>
+            <dd class="col-sm-8">@_backups.FileCount</dd>
+            <dt class="col-sm-4">Dernière sauvegarde</dt>
+            <dd class="col-sm-8">
+                @if (_backups.LastBackupUtc is null)
+                {
+                    <span class="text-danger">Aucune</span>
+                }
+                else
+                {
+                    @_backups.LastBackupUtc.Value.ToLocalTime().ToString("G", CultureInfo.GetCultureInfo("fr-FR"))
+                    <span class="text-muted">(@_backups.LastBackupFileName)</span>
+                }
+            </dd>
+        </dl>
+    }
+
+    <h3 class="h6">Derniers logs Warning / Error</h3>
+    @if (_logLines.Count == 0)
+    {
+        <p class="text-muted">Aucun warning ni erreur dans le fichier Serilog du jour.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Heure</th>
+                        <th>Niveau</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in _logLines)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@line.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                            <td><span class="badge @(line.Level == "WRN" ? "text-bg-warning" : "text-bg-danger")">@line.Level</span></td>
+                            <td class="small">@line.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
 <section>
     <h2 class="h5 mb-3">Système</h2>
     <dl class="row mb-0">
@@ -141,6 +245,10 @@
     [Inject] private IDbContextFactory<AppDbContext> DbFactory { get; set; } = default!;
     [Inject] private UserManager<IdentityUser> UserManager { get; set; } = default!;
     [Inject] private IWebHostEnvironment HostEnvironment { get; set; } = default!;
+    [Inject] private HealthCheckService HealthChecks { get; set; } = default!;
+    [Inject] private BackupFolderMonitor BackupFolder { get; set; } = default!;
+    [Inject] private SerilogFileTail LogTail { get; set; } = default!;
+    [Inject] private ILogger<Admin> Logger { get; set; } = default!;
 
     private ISet<string> _activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private List<UserRow> _users = [];
@@ -149,23 +257,62 @@
     private string? _dbError;
     private string? _toastMessage;
     private string _toastCss = "alert-success";
+    private HealthReport? _health;
+    private BackupFolderSnapshot? _backups;
+    private IReadOnlyList<LogLine> _logLines = [];
+    private DateTimeOffset? _supervisionAt;
 
     protected override async Task OnInitializedAsync()
     {
-        await ReloadModulesAsync();
-        await LoadUsersAsync();
+        await RefreshSupervisionAsync();
+        try
+        {
+            await ReloadModulesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Impossible de charger les modules sur /admin");
+        }
+
+        try
+        {
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Impossible de charger les utilisateurs sur /admin");
+        }
+
         await CheckDatabaseAsync();
+    }
+
+    private async Task RefreshSupervisionAsync()
+    {
+        _busy = true;
+        try
+        {
+            _health = await HealthChecks.CheckHealthAsync();
+            _backups = BackupFolder.GetSnapshot();
+            _logLines = LogTail.ReadRecentWarnings(20);
+            _supervisionAt = DateTimeOffset.Now;
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task ReloadModulesAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        _activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        await using var db = await DbFactory.CreateDbContextAsync(cts.Token);
+        _activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db, cts.Token);
     }
 
     private async Task LoadUsersAsync()
     {
-        var users = await UserManager.Users.OrderBy(u => u.Email).ToListAsync();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        var users = await UserManager.Users.OrderBy(u => u.Email).ToListAsync(cts.Token);
         var rows = new List<UserRow>(users.Count);
         foreach (var user in users)
         {
@@ -185,8 +332,9 @@
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            await db.Database.ExecuteSqlRawAsync("SELECT 1");
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            await using var db = await DbFactory.CreateDbContextAsync(cts.Token);
+            await db.Database.ExecuteSqlRawAsync("SELECT 1", cts.Token);
             _dbOk = true;
             _dbError = null;
         }
@@ -194,6 +342,7 @@
         {
             _dbOk = false;
             _dbError = ex.Message;
+            Logger.LogError(ex, "Échec de connexion à MariaDB depuis /admin");
         }
     }
 
@@ -205,12 +354,17 @@
             await using var db = await DbFactory.CreateDbContextAsync();
             await ModuleManager.SetModuleActiveAsync(db, module.Key, isActive);
             await ReloadModulesAsync();
+            Logger.LogInformation(
+                "Module {ModuleKey} {ModuleAction} par un administrateur",
+                module.Key,
+                isActive ? "activated" : "deactivated");
             ShowToast(isActive
                 ? $"Le module « {module.DisplayName} » est maintenant actif."
                 : $"Le module « {module.DisplayName} » est maintenant inactif.");
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Échec d'activation du module {ModuleKey} vers {IsActive}", module.Key, isActive);
             ShowToast($"Impossible de mettre à jour le module : {ex.Message}", success: false);
         }
         finally
@@ -226,6 +380,7 @@
             return;
         }
 
+        var previousRole = row.Role;
         _busy = true;
         try
         {
@@ -255,10 +410,17 @@
             }
 
             row.Role = newRole;
+            Logger.LogInformation(
+                "Rôle utilisateur {UserId} {UserEmail} changé de {OldRole} vers {NewRole}",
+                row.Id,
+                row.Email,
+                previousRole,
+                newRole);
             ShowToast($"Le rôle de {row.Email} est maintenant {newRole}.");
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Échec du changement de rôle pour {UserId} vers {NewRole}", row.Id, newRole);
             ShowToast($"Impossible de changer le rôle : {ex.Message}", success: false);
         }
         finally
@@ -266,6 +428,20 @@
             _busy = false;
         }
     }
+
+    private static string HealthBadgeClass(HealthStatus status) => status switch
+    {
+        HealthStatus.Healthy => "text-bg-success",
+        HealthStatus.Degraded => "text-bg-warning",
+        _ => "text-bg-danger"
+    };
+
+    private static string HealthLabel(HealthStatus status) => status switch
+    {
+        HealthStatus.Healthy => "OK",
+        HealthStatus.Degraded => "Alerte",
+        _ => "KO"
+    };
 
     private void ShowToast(string message, bool success = true)
     {

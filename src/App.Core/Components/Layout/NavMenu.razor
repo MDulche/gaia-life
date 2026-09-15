@@ -58,9 +58,17 @@
 
     private async Task ReloadModulesAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var keys = await ModuleManager.GetActiveModuleKeysAsync(db);
-        _activeModules = ModuleManager.GetActiveModules(keys);
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            await using var db = await DbFactory.CreateDbContextAsync(cts.Token);
+            var keys = await ModuleManager.GetActiveModuleKeysAsync(db, cts.Token);
+            _activeModules = ModuleManager.GetActiveModules(keys);
+        }
+        catch (Exception)
+        {
+            // MariaDB injoignable : le menu Accueil / Admin reste affiché.
+        }
     }
 
     private static string NavIconClass(string icon) => icon switch

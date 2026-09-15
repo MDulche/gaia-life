@@ -19,4 +19,6 @@ RUN apt-get update \
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 COPY --from=build /app/publish .
+HEALTHCHECK --interval=10s --timeout=5s --start-period=40s --retries=12 \
+    CMD curl -f http://127.0.0.1:8080/health/live || exit 1
 ENTRYPOINT ["dotnet", "App.Core.dll"]

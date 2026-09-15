@@ -1,8 +1,13 @@
 #!/bin/sh
 set -eu
 
+# Même schéma que Serilog fichier : "yyyy-MM-dd HH:mm:ss [INF|ERR] message"
 log() {
-    echo "[$(date -Iseconds)] $*"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INF] $*"
+}
+
+err() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [ERR] $*"
 }
 
 if [ -f /etc/backup.env ]; then
@@ -19,7 +24,7 @@ BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 
 if [ -z "$DB_PASSWORD" ]; then
-    log "ERREUR: DB_PASSWORD est vide, dump abandonné."
+    err "ERREUR: DB_PASSWORD est vide, dump abandonné."
     exit 1
 fi
 
@@ -51,19 +56,19 @@ status=$?
 set -e
 
 if [ "$status" -ne 0 ]; then
-    log "ERREUR: ${DUMP_BIN} a échoué (code ${status}). Aucun fichier de sauvegarde n'est conservé."
+    err "ERREUR: ${DUMP_BIN} a échoué (code ${status}). Aucun fichier de sauvegarde n'est conservé."
     rm -f "$TMP"
     exit 1
 fi
 
 if [ ! -s "$TMP" ]; then
-    log "ERREUR: le dump est vide, fichier abandonné."
+    err "ERREUR: le dump est vide, fichier abandonné."
     rm -f "$TMP"
     exit 1
 fi
 
 if ! gzip -t "$TMP"; then
-    log "ERREUR: archive gzip invalide, fichier abandonné."
+    err "ERREUR: archive gzip invalide, fichier abandonné."
     rm -f "$TMP"
     exit 1
 fi

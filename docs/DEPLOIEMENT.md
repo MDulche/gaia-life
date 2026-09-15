@@ -9,10 +9,12 @@
 5. [DbContext : Identity Scoped et factories métier](#dbcontext--identity-scoped-et-factories-métier)
 6. [Données : foyer partagé](#données--foyer-partagé-pas-de-cloisonnement-par-utilisateur)
 7. [Sauvegarde et restauration](#sauvegarde-et-restauration)
-8. [GitHub Container Registry](#github-container-registry)
-9. [Mise à jour de production](#mise-à-jour-de-production)
-10. [Rollback](#rollback)
-11. [Vérification phase 4](#vérification-phase-4)
+8. [Logs et health checks](#logs-et-health-checks)
+9. [GitHub Container Registry](#github-container-registry)
+10. [Mise à jour de production](#mise-à-jour-de-production)
+11. [Rollback](#rollback)
+12. [Vérification phase 4](#vérification-phase-4)
+13. [Vérification phase 5](#vérification-phase-5)
 
 ## Fichiers d'environnement
 
@@ -108,7 +110,7 @@ Sur l'hôte, pointez `gaia.local` vers la machine :
 
 Ouvrez le pare-feu de l'hôte pour TCP 80 et 443 si les téléphones ne joignent pas le proxy (Windows : règle entrante « Gaia-Life HTTPS »).
 
-`curl` Windows (schannel) peut refuser le certificat mkcert (`CRYPT_E_NO_REVOCATION_CHECK`). Chrome et Edge font confiance à la CA après `mkcert -install`. Pour un test en ligne de commande : `curl.exe --ssl-no-revoke https://127.0.0.1/health`.
+`curl` Windows (schannel) peut refuser le certificat mkcert (`CRYPT_E_NO_REVOCATION_CHECK`). Chrome et Edge font confiance à la CA après `mkcert -install`. Pour un test en ligne de commande : `curl.exe --ssl-no-revoke https://127.0.0.1/health/live` (liveness) ou `https://127.0.0.1/health` (JSON détaillé).
 
 Ensuite : `docker compose --env-file .env.dev -f docker-compose.dev.yml up -d` (ou `.env.prod` / `docker-compose.prod.yml`). Nginx écoute 80 (redirige vers HTTPS) et 443, et proxifie vers `app-core:8080` (WebSocket Blazor Server inclus). En production, le port 8080 n'est publié que sur `127.0.0.1`.
 
@@ -260,6 +262,49 @@ Cycle de test recommandé :
 4. Restaurer le fichier `.sql.gz` (confirmation `OUI`).
 5. Recharger `/finance` : la donnée est revenue.
 
+## Logs et health checks
+
+### Fichiers de logs (Serilog)
+
+`App.Core` journalise avec Serilog (console + fichier). Propriétés structurées (pas de `string.Format`) pour : activation de module, changement de rôle, échec de connexion MariaDB, health checks non OK.
+
+| Destination | Où | Niveau | Rotation |
+| --- | --- | --- | --- |
+| Console (`docker compose logs app-core`) | stdout du conteneur | Information en Development, Warning en Production | — |
+| Fichier | hôte `./logs/gaia-YYYYMMDD.log` → conteneur `/logs` | Information et plus | un fichier par jour, **14** fichiers conservés |
+
+Le bind-mount `./logs:/logs` survit à la recréation du conteneur. Variables Compose : `HealthChecks__LogsPath=/logs`, `HealthChecks__BackupsPath=/backups`.
+
+Niveaux (namespaces) :
+
+- Production (`appsettings.json`) : `Microsoft.EntityFrameworkCore.Database.Command` = **Warning** (pas chaque `SELECT`).
+- Development (`appsettings.Development.json`) : Command = **Information** (SQL visible pour le débogage).
+
+Les dumps `mariadb-backup` utilisent le même préfixe d'horodatage : `yyyy-MM-dd HH:mm:ss [INF|ERR] …` (`docker compose logs mariadb-backup`).
+
+### Endpoints
+
+| URL | Rôle | Docker HEALTHCHECK |
+| --- | --- | --- |
+| `GET /health/live` | Texte `ok` si le processus répond. Aucun check (base, disque, sauvegarde). | **Oui** (`Dockerfile` et `docker-compose.prod.yml`) |
+| `GET /health` | JSON détaillé (statut par check, via HealthChecks UI ResponseWriter). | Non : un cron de backup en retard ne doit pas faire redémarrer `app-core`. |
+
+Les deux routes sont anonymes. En HTTPS : `curl.exe --ssl-no-revoke https://127.0.0.1/health`.
+
+Un *publisher* exécute les checks toutes les **15 s** (après 5 s au démarrage) et écrit un Warning/Error Serilog si un check n'est pas Healthy — MariaDB down apparaît sans attendre un clic utilisateur.
+
+### Liste des checks et seuils
+
+| Nom | Unhealthy | Degraded (orange) | Healthy |
+| --- | --- | --- | --- |
+| `mariadb` | Connexion MySQL/MariaDB impossible (timeout 3 s, `AspNetCore.HealthChecks.MySql`) | — | `SELECT` ping OK |
+| `espace-disque` | Espace libre du volume de `/backups` **< 1 Gio** (`HealthChecks:DiskUnhealthyBytes`) | Sous **5 Gio** (`DiskWarningBytes`) | Au-dessus de 5 Gio |
+| `derniere-sauvegarde` | Aucun `quotidien_*.sql.gz`, dossier absent, ou dump le plus récent **> 26 h** (`BackupMaxAgeHours`, marge sur le cron `0 3 * * *`) | — | Dump plus récent que 26 h |
+
+La page `/admin` (rôle Admin), section **Supervision** : badges Vert / Orange / Rouge, 20 dernières lignes Warning/Error du fichier du jour, taille et nombre de dumps, bouton **Rafraîchir** (circuit Blazor, sans recharger la page).
+
+Pour un test rapide du check sauvegarde sans attendre 26 h : `HealthChecks__BackupMaxAgeHours=0.01` le temps du test, ou reculer la date du fichier (`touch -d '2 days ago'` dans le conteneur, ou `LastWriteTime` sur l'hôte Windows).
+
 ## GitHub Container Registry
 
 L'image de production est :
@@ -300,7 +345,7 @@ Le script :
 2. Sauvegarde MariaDB via `mariadb-backup` (`scripts/backup.sh`).
 3. `docker compose --env-file .env.prod -f docker-compose.prod.yml pull` (image GHCR).
 4. `docker compose ... up -d` (recrée les conteneurs dont l'image a changé).
-5. Attend que le healthcheck `app-core` (`GET /health`) soit `healthy`, code de retour non zéro sinon.
+5. Attend que le healthcheck `app-core` (`GET /health/live`) soit `healthy`, code de retour non zéro sinon.
 
 Équivalent manuel historique (sans pull GHCR, reconstruction locale) :
 
@@ -309,7 +354,7 @@ git pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
-MariaDB n'est pas exposée hors du réseau Docker interne. Le volume `./backups` est monté sur `/backups`.
+MariaDB n'est pas exposée hors du réseau Docker interne. Le volume `./backups` est monté sur `/backups`. Les logs Serilog sont sur `./logs` → `/logs`.
 
 Après un schéma de base nouveau, les migrations s'appliquent au démarrage de `app-core` (`MigrateAsync`). Vous pouvez aussi lancer `dotnet ef database update` depuis une machine autorisée.
 
@@ -329,6 +374,20 @@ Après un schéma de base nouveau, les migrations s'appliquent au démarrage de 
 | --- | --- | --- |
 | PWA | Installation Android Chrome et, si possible, iOS Safari | HTTPS (proxy) ; menu « Ajouter à l'écran d'accueil » ; ouverture `standalone` sans barre d'URL. En Dev, le SW est absent (normal). |
 | Sauvegarde | Dump nocturne + restauration testée | `ls -l backups/` (horodatage le plus récent) ; cycle insert → dump → suppression → `restore.sh`. |
-| GHCR / déploiement | Image poussée, `deploy-prod.sh` OK | Après un push `main` : package `ghcr.io/mdulche/gaia-life`. Sur le serveur : `./scripts/deploy-prod.sh` (sauvegarde puis healthcheck `/health`). |
+| GHCR / déploiement | Image poussée, `deploy-prod.sh` OK | Après un push `main` : package `ghcr.io/mdulche/gaia-life`. Sur le serveur : `./scripts/deploy-prod.sh` (sauvegarde puis healthcheck `/health/live`). |
 
 Le déploiement prod reste **manuel** (pas de webhook).
+
+## Vérification phase 5
+
+À relire après un changement logs / health / `/admin` :
+
+| Volet | Attendu | Comment vérifier |
+| --- | --- | --- |
+| Serilog console | Lignes `[HH:mm:ss INF]` / `WRN` / `ERR` | `docker compose --env-file .env.dev -f docker-compose.dev.yml logs app-core` |
+| Serilog fichier | Fichier du jour sur l'hôte | `Get-ChildItem logs` (Windows) ou `ls -l logs/` ; ouvrir `logs/gaia-YYYYMMDD.log` |
+| `/health/live` | `ok`, HTTP 200 même si un dump a du retard | `curl.exe --ssl-no-revoke https://127.0.0.1/health/live` ou `http://localhost:8080/health/live` |
+| `/health` | JSON `entries.mariadb`, `espace-disque`, `derniere-sauvegarde` | Même URL sans `/live` |
+| MariaDB coupée | `mariadb` Unhealthy, badge rouge `/admin`, logs WRN/ERR | Déjà connecté sur `/admin` ; `docker compose ... stop mariadb` ; **Rafraîchir** sous 15–20 s ; puis `start mariadb` |
+| Sauvegarde trop vieille | `derniere-sauvegarde` Unhealthy | Reculer `LastWriteTime` d'un `quotidien_*.sql.gz` de 27 h, Rafraîchir ; restaurer la date ensuite |
+| Supervision | 20 lignes WRN/ERR + stats `/backups` | Section Supervision de `/admin` après les deux tests ci-dessus |

@@ -13,6 +13,8 @@ services:
       - /workspace/src/App.Modules.Finance/obj
       - /workspace/src/App.Modules.Travail/bin
       - /workspace/src/App.Modules.Travail/obj
+      - ./logs:/logs
+      - ./backups:/backups
     command: ["dotnet", "watch", "run", "--project", "src/App.Core/App.Core.csproj", "--urls", "http://0.0.0.0:8080"]
     ports:
       - "8080:8080"
@@ -29,6 +31,8 @@ services:
       SeedAdmin__AutoLogin: "true"
       SeedTest__Email: ${SEED_TEST_EMAIL:-test@gaia.local}
       SeedTest__Password: ${SEED_TEST_PASSWORD}
+      HealthChecks__LogsPath: /logs
+      HealthChecks__BackupsPath: /backups
     depends_on:
       mariadb:
         condition: service_healthy

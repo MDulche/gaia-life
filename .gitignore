@@ -14,6 +14,10 @@
 backups/*
 !backups/.gitkeep
 
+# Serilog bind-mount (hôte ./logs → conteneur /logs)
+logs/*
+!logs/.gitkeep
+
 # Certificats mkcert (clé privée et CA locale, jamais commités)
 certs/*
 !certs/.gitkeep
@@ -49,6 +53,10 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+# Dossier hôte Serilog (bind-mount Docker) : conserver .gitkeep
+!/logs/
+/logs/*
+!/logs/.gitkeep
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

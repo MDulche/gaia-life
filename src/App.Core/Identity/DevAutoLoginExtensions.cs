@@ -67,7 +67,8 @@ public static class DevAutoLoginExtensions
             || path.StartsWithSegments("/_framework")
             || path.StartsWithSegments("/_content")
             || path.StartsWithSegments("/lib")
-            || path.StartsWithSegments("/Account/Logout"))
+            || path.StartsWithSegments("/Account/Logout")
+            || path.StartsWithSegments("/health"))
         {
             return true;
         }
