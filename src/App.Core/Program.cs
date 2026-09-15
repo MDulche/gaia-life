@@ -68,6 +68,7 @@ builder.Services.PostConfigure<GaiaHealthOptions>(opts =>
 });
 builder.Services.AddSingleton<BackupFolderMonitor>();
 builder.Services.AddSingleton<SerilogFileTail>();
+builder.Services.AddSingleton<HealthAlertState>();
 builder.Services.AddSingleton<IHealthCheckPublisher, LoggingHealthCheckPublisher>();
 builder.Services.Configure<HealthCheckPublisherOptions>(options =>
 {

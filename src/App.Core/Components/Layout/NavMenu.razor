@@ -1,54 +1,82 @@
 ﻿@implements IDisposable
-@* Menu : uniquement les modules actifs en base. Rechargé à chaque navigation. *@
+@* Sidebar : section Modules (actifs) + Administration en bas. Ne plante pas si MariaDB est coupée. *@
 @inject ModuleManager ModuleManager
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject NavigationManager Navigation
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Gaia-Life</a>
+<aside class="sidebar @(_collapsed ? "collapsed" : null)">
+    <div class="top-row navbar navbar-dark">
+        <a class="navbar-brand" href="" title="Gaia-Life">
+            <span class="brand-full">Gaia-Life</span>
+            <span class="brand-short" aria-hidden="true">G</span>
+        </a>
+        <button type="button"
+                class="sidebar-collapse-btn"
+                title="@(_collapsed ? "Déplier le menu" : "Replier le menu")"
+                aria-label="@(_collapsed ? "Déplier le menu" : "Replier le menu")"
+                aria-expanded="@(!_collapsed)"
+                @onclick="ToggleCollapsed">
+            <span aria-hidden="true">@(_collapsed ? "»" : "«")</span>
+        </button>
     </div>
-</div>
+    <input type="checkbox" title="Ouvrir le menu" class="navbar-toggler" aria-label="Ouvrir ou fermer le menu" />
 
-<input type="checkbox" title="Menu de navigation" class="navbar-toggler" />
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Accueil
-            </NavLink>
-        </div>
-
-        @foreach (var module in _activeModules)
-        {
+    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler')?.click()">
+        <nav class="nav flex-column nav-body">
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="@module.RootRoute.TrimStart('/')">
-                    <span class="bi @NavIconClass(module.Icon)" aria-hidden="true"></span> @module.DisplayName
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span>
+                    <span class="nav-link-text">Accueil</span>
                 </NavLink>
             </div>
-        }
 
-        <AuthorizeView Roles="Admin">
+            <p class="nav-section">Modules</p>
+            @if (_activeModules.Count == 0)
+            {
+                <p class="nav-empty px-3">Aucun module actif</p>
+            }
+            else
+            {
+                @foreach (var module in _activeModules)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="@module.RootRoute.TrimStart('/')">
+                            <span class="bi @NavIconClass(module.Icon)" aria-hidden="true"></span>
+                            <span class="nav-link-text">@module.DisplayName</span>
+                        </NavLink>
+                    </div>
+                }
+            }
+        </nav>
+
+        <AuthorizeView Roles="@AppRoles.Admin">
             <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="admin">
-                        <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span> Administration
-                    </NavLink>
-                </div>
+                <nav class="nav flex-column nav-admin px-3">
+                    <p class="nav-section">Administration</p>
+                    <div class="nav-item">
+                        <NavLink class="nav-link" href="admin" Match="NavLinkMatch.Prefix">
+                            <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span>
+                            <span class="nav-link-text">Administration</span>
+                            <HealthAlertMark />
+                        </NavLink>
+                    </div>
+                </nav>
             </Authorized>
         </AuthorizeView>
-    </nav>
-</div>
+    </div>
+</aside>
 
 @code {
     private IReadOnlyList<IAppModule> _activeModules = [];
+    private bool _collapsed;
 
     protected override async Task OnInitializedAsync()
     {
         Navigation.LocationChanged += OnLocationChanged;
         await ReloadModulesAsync();
     }
+
+    private void ToggleCollapsed() => _collapsed = !_collapsed;
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args)
     {

@@ -1,11 +1,7 @@
 @* Widget accueil : employeur actif, solde de l'année, dernière fiche de paie. *@
 @inject TravailService Travail
 
-<div>
-    <h3 class="h6 text-muted mb-2">
-        <span class="module-icon bi-briefcase me-1" aria-hidden="true"></span>
-        Travail
-    </h3>
+<WidgetCard Title="Travail" Icon="bi-briefcase">
     @if (_loading)
     {
         <p class="text-muted mb-0">Chargement…</p>
@@ -17,7 +13,7 @@
     else
     {
         <p class="mb-1"><strong>@_employeur.Nom</strong></p>
-        <p class="fs-4 mb-2">@TravailFormat.Jours(_solde?.JoursRestants ?? 0) restants</p>
+        <p class="widget-metric mb-2">@TravailFormat.Jours(_solde?.JoursRestants ?? 0) restants</p>
         @if (_fiche is null)
         {
             <p class="text-muted small mb-0">Aucune fiche de paie.</p>
@@ -30,7 +26,7 @@
             </p>
         }
     }
-</div>
+</WidgetCard>
 
 @code {
     private bool _loading = true;

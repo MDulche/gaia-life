@@ -57,18 +57,22 @@
                                 <label class="form-label" for="fiche-mois">Mois</label>
                                 <input id="fiche-mois" type="month" class="form-control" value="@_fiche.MoisInput"
                                        @onchange="e => _fiche.MoisInput = e.Value?.ToString() ?? _fiche.MoisInput" />
+                                <ValidationMessage For="() => _fiche.MoisInput" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" for="fiche-brut">Salaire brut (€)</label>
                                 <InputNumber id="fiche-brut" class="form-control" @bind-Value="_fiche.SalaireBrut" />
+                                <ValidationMessage For="() => _fiche.SalaireBrut" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" for="fiche-net">Salaire net (€)</label>
                                 <InputNumber id="fiche-net" class="form-control" @bind-Value="_fiche.SalaireNet" />
+                                <ValidationMessage For="() => _fiche.SalaireNet" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" for="fiche-cotis">Cotisations (€)</label>
                                 <InputNumber id="fiche-cotis" class="form-control" @bind-Value="_fiche.TotalCotisations" />
+                                <ValidationMessage For="() => _fiche.TotalCotisations" />
                             </div>
                             <div class="col-12">
                                 <label class="form-label" for="fiche-note">Note (optionnel)</label>
@@ -154,15 +158,18 @@
                             <div class="col-md-4">
                                 <label class="form-label" for="conge-debut">Date de début</label>
                                 <InputDate id="conge-debut" class="form-control" @bind-Value="_conge.DateDebut" @bind-Value:after="RecalcJours" />
+                                <ValidationMessage For="() => _conge.DateDebut" />
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label" for="conge-fin">Date de fin</label>
                                 <InputDate id="conge-fin" class="form-control" @bind-Value="_conge.DateFin" @bind-Value:after="RecalcJours" />
+                                <ValidationMessage For="() => _conge.DateFin" />
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label" for="conge-jours">Nombre de jours</label>
                                 <InputNumber id="conge-jours" class="form-control" @bind-Value="_conge.NombreJours" />
                                 <div class="form-text">Calculé en jours ouvrés (lun–ven). Ajustable pour une demi-journée.</div>
+                                <ValidationMessage For="() => _conge.NombreJours" />
                             </div>
                             <div class="col-md-8">
                                 <label class="form-label" for="conge-com">Commentaire (optionnel)</label>
@@ -376,7 +383,7 @@ else if (_ready)
         }
     }
 
-    private sealed class NewFicheModel
+    private sealed class NewFicheModel : System.ComponentModel.DataAnnotations.IValidatableObject
     {
         public string MoisInput { get; set; } = string.Empty;
         public decimal SalaireBrut { get; set; }
@@ -389,9 +396,37 @@ else if (_ready)
             var today = DateTime.Today;
             return new NewFicheModel { MoisInput = $"{today.Year:D4}-{today.Month:D2}" };
         }
+
+        public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate(
+            System.ComponentModel.DataAnnotations.ValidationContext validationContext)
+        {
+            if (string.IsNullOrWhiteSpace(MoisInput))
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "Le mois est obligatoire.", [nameof(MoisInput)]);
+            }
+
+            if (SalaireBrut < 0)
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "Le salaire brut ne peut pas être négatif.", [nameof(SalaireBrut)]);
+            }
+
+            if (SalaireNet < 0)
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "Le salaire net ne peut pas être négatif.", [nameof(SalaireNet)]);
+            }
+
+            if (TotalCotisations < 0)
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "Les cotisations ne peuvent pas être négatives.", [nameof(TotalCotisations)]);
+            }
+        }
     }
 
-    private sealed class NewCongeModel
+    private sealed class NewCongeModel : System.ComponentModel.DataAnnotations.IValidatableObject
     {
         public TypeConge Type { get; set; } = TypeConge.Paye;
         public DateTime DateDebut { get; set; }
@@ -408,6 +443,24 @@ else if (_ready)
                 DateFin = today,
                 NombreJours = TravailCalendrier.CompterJoursOuvres(today, today)
             };
+        }
+
+        public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate(
+            System.ComponentModel.DataAnnotations.ValidationContext validationContext)
+        {
+            if (DateFin.Date < DateDebut.Date)
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "La date de fin ne peut pas être antérieure à la date de début.",
+                    [nameof(DateFin)]);
+            }
+
+            if (NombreJours <= 0)
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "Le nombre de jours doit être strictement positif.",
+                    [nameof(NombreJours)]);
+            }
         }
     }
 }

@@ -1,0 +1,11 @@
+@using Microsoft.Extensions.Diagnostics.HealthChecks
+
+<span class="badge @HealthStatusUi.BadgeClass(Status)">
+    <span class="health-badge-icon" aria-hidden="true">@HealthStatusUi.Icon(Status)</span>
+    @HealthStatusUi.Label(Status)
+</span>
+
+@code {
+    [Parameter]
+    public HealthStatus Status { get; set; }
+}

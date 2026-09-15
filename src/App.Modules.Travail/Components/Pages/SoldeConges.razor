@@ -32,10 +32,12 @@
             <div class="col-md-3">
                 <label class="form-label" for="solde-annee">Année</label>
                 <InputNumber id="solde-annee" class="form-control" @bind-Value="_form.Annee" @bind-Value:after="ReloadSoldeAsync" />
+                <ValidationMessage For="() => _form.Annee" />
             </div>
             <div class="col-md-3">
                 <label class="form-label" for="solde-acquis">Jours acquis</label>
                 <InputNumber id="solde-acquis" class="form-control" @bind-Value="_form.JoursAcquis" />
+                <ValidationMessage For="() => _form.JoursAcquis" />
             </div>
             <div class="col-md-3">
                 <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Enregistrer</button>
@@ -118,7 +120,10 @@ else if (_ready)
 
     private sealed class SoldeForm
     {
+        [System.ComponentModel.DataAnnotations.Range(1990, 2100, ErrorMessage = "Indiquez une année entre 1990 et 2100.")]
         public int Annee { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Range(0, 400, ErrorMessage = "Les jours acquis doivent être compris entre 0 et 400.")]
         public decimal JoursAcquis { get; set; }
     }
 }

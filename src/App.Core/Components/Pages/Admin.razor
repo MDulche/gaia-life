@@ -1,13 +1,15 @@
 @page "/admin"
-@* Administration : activer les modules, changer les rôles, sonder MariaDB. Réservé au rôle Admin. *@
+@page "/admin/{Tab}"
+@* Administration : onglets Modules / Utilisateurs / Système / Supervision. *@
 @attribute [Authorize(Roles = AppRoles.Admin)]
+@implements IDisposable
 @using System.Globalization
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.Diagnostics.HealthChecks
 
-<PageTitle>Administration</PageTitle>
+<PageTitle>Administration — @TabTitle</PageTitle>
 
-<h1 class="h3 mb-4">Administration</h1>
+<h1 class="h3 mb-3">Administration</h1>
 
 @if (!string.IsNullOrEmpty(_toastMessage))
 {
@@ -17,230 +19,257 @@
     </div>
 }
 
-<section class="mb-5">
-    <h2 class="h5 mb-3">Modules</h2>
-    <div class="table-responsive">
-        <table class="table table-striped align-middle">
-            <thead>
-                <tr>
-                    <th>Icône</th>
-                    <th>Nom</th>
-                    <th>Clé technique</th>
-                    <th>État</th>
-                    <th>Activer</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (ModuleManager.AllModules.Count == 0)
-                {
-                    <tr>
-                        <td colspan="5" class="text-muted text-center">Aucun module enregistré pour le moment.</td>
-                    </tr>
-                }
-                else
-                {
-                    @foreach (var module in ModuleManager.AllModules)
-                    {
-                        var isActive = _activeKeys.Contains(module.Key);
-                        <tr>
-                            <td><span class="module-icon @module.Icon" title="@module.Icon" aria-hidden="true"></span></td>
-                            <td>@module.DisplayName</td>
-                            <td><code>@module.Key</code></td>
-                            <td>
-                                @if (isActive)
-                                {
-                                    <span class="badge text-bg-success">Actif</span>
-                                }
-                                else
-                                {
-                                    <span class="badge text-bg-secondary">Inactif</span>
-                                }
-                            </td>
-                            <td>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input"
-                                           type="checkbox"
-                                           role="switch"
-                                           checked="@isActive"
-                                           disabled="@_busy"
-                                           @onchange="async _ => await ToggleModuleAsync(module, !isActive)" />
-                                </div>
-                            </td>
-                        </tr>
-                    }
-                }
-            </tbody>
-        </table>
-    </div>
-</section>
+<nav class="admin-tabs nav nav-tabs mb-3" aria-label="Sections d'administration">
+    <NavLink class="nav-link" href="/admin/modules" Match="NavLinkMatch.All">Modules</NavLink>
+    <NavLink class="nav-link" href="/admin/utilisateurs" Match="NavLinkMatch.All">Utilisateurs</NavLink>
+    <NavLink class="nav-link" href="/admin/systeme" Match="NavLinkMatch.All">Système</NavLink>
+    <NavLink class="nav-link d-inline-flex align-items-center gap-1" href="/admin/supervision" Match="NavLinkMatch.All">
+        Supervision
+        <HealthAlertMark />
+    </NavLink>
+</nav>
 
-<section class="mb-5">
-    <h2 class="h5 mb-3">Utilisateurs</h2>
-    @if (_users.Count == 0)
-    {
-        <p class="text-muted">Aucun compte pour le moment. Le compte administrateur peut être créé via le seed de démarrage ou directement en base.</p>
-    }
-    else
-    {
+@if (_tab == "modules")
+{
+    <section>
+        <h2 class="h5 mb-3">Modules</h2>
         <div class="table-responsive">
             <table class="table table-striped align-middle">
                 <thead>
                     <tr>
-                        <th>E-mail</th>
-                        <th>Rôle actuel</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var user in _users)
-                    {
-                        <tr>
-                            <td>@user.Email</td>
-                            <td>
-                                <select class="form-select form-select-sm"
-                                        style="max-width: 12rem;"
-                                        value="@user.Role"
-                                        disabled="@_busy"
-                                        @onchange="e => ChangeRoleAsync(user, e.Value?.ToString())">
-                                    @foreach (var role in AppRoles.All)
-                                    {
-                                        <option value="@role">@role</option>
-                                    }
-                                </select>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-</section>
-
-<section class="mb-5">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h2 class="h5 mb-0">Supervision</h2>
-        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="RefreshSupervisionAsync">
-            Rafraîchir
-        </button>
-    </div>
-    @if (_supervisionAt is not null)
-    {
-        <p class="text-muted small mb-3">Dernière lecture @_supervisionAt.Value.ToLocalTime().ToString("G", CultureInfo.GetCultureInfo("fr-FR"))</p>
-    }
-
-    <h3 class="h6">Health checks</h3>
-    @if (_health is null)
-    {
-        <p class="text-muted">Aucun rapport pour le moment.</p>
-    }
-    else
-    {
-        <div class="table-responsive mb-4">
-            <table class="table table-sm table-striped align-middle">
-                <thead>
-                    <tr>
+                        <th>Icône</th>
                         <th>Nom</th>
-                        <th>Statut</th>
-                        <th>Détail</th>
+                        <th>Clé technique</th>
+                        <th>État</th>
+                        <th>Activer</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var entry in _health.Entries)
+                    @if (ModuleManager.AllModules.Count == 0)
                     {
                         <tr>
-                            <td><code>@entry.Key</code></td>
-                            <td><span class="badge @HealthBadgeClass(entry.Value.Status)">@HealthLabel(entry.Value.Status)</span></td>
-                            <td class="small">@(entry.Value.Description ?? entry.Value.Exception?.Message ?? "—")</td>
+                            <td colspan="5" class="text-muted text-center">Aucun module enregistré pour le moment.</td>
                         </tr>
+                    }
+                    else
+                    {
+                        @foreach (var module in ModuleManager.AllModules)
+                        {
+                            var isActive = _activeKeys.Contains(module.Key);
+                            <tr>
+                                <td><span class="module-icon @module.Icon" title="@module.Icon" aria-hidden="true"></span></td>
+                                <td>@module.DisplayName</td>
+                                <td><code>@module.Key</code></td>
+                                <td>
+                                    @if (isActive)
+                                    {
+                                        <span class="badge text-bg-success">Actif</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-secondary">Inactif</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               role="switch"
+                                               checked="@isActive"
+                                               disabled="@_busy"
+                                               @onchange="async _ => await ToggleModuleAsync(module, !isActive)" />
+                                    </div>
+                                </td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
         </div>
-    }
-
-    <h3 class="h6">Sauvegardes</h3>
-    @if (_backups is null)
-    {
-        <p class="text-muted">Dossier de sauvegarde illisible.</p>
-    }
-    else
-    {
-        <dl class="row mb-4">
-            <dt class="col-sm-4">Dossier</dt>
-            <dd class="col-sm-8"><code>@_backups.Path</code></dd>
-            <dt class="col-sm-4">Taille</dt>
-            <dd class="col-sm-8">@DiskSpaceHealthCheck.FormatSize(_backups.TotalBytes)</dd>
-            <dt class="col-sm-4">Fichiers quotidien_*.sql.gz</dt>
-            <dd class="col-sm-8">@_backups.FileCount</dd>
-            <dt class="col-sm-4">Dernière sauvegarde</dt>
-            <dd class="col-sm-8">
-                @if (_backups.LastBackupUtc is null)
+    </section>
+}
+else if (_tab == "utilisateurs")
+{
+    <section>
+        <h2 class="h5 mb-3">Utilisateurs</h2>
+        @if (_users.Count == 0)
+        {
+            <p class="text-muted">Aucun compte pour le moment. Le compte administrateur peut être créé via le seed de démarrage ou directement en base.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>E-mail</th>
+                            <th>Rôle actuel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in _users)
+                        {
+                            <tr>
+                                <td>@user.Email</td>
+                                <td>
+                                    <select class="form-select form-select-sm"
+                                            style="max-width: 12rem;"
+                                            value="@user.Role"
+                                            disabled="@_busy"
+                                            @onchange="e => ChangeRoleAsync(user, e.Value?.ToString())">
+                                        @foreach (var role in AppRoles.All)
+                                        {
+                                            <option value="@role">@role</option>
+                                        }
+                                    </select>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else if (_tab == "systeme")
+{
+    <section>
+        <h2 class="h5 mb-3">Système</h2>
+        <dl class="row mb-0">
+            <dt class="col-sm-4 col-md-3">Environnement</dt>
+            <dd class="col-sm-8 col-md-9"><code>@HostEnvironment.EnvironmentName</code></dd>
+            <dt class="col-sm-4 col-md-3">Base de données</dt>
+            <dd class="col-sm-8 col-md-9">
+                @if (_dbOk)
                 {
-                    <span class="text-danger">Aucune</span>
+                    <span class="text-success fw-semibold">Connecté</span>
                 }
                 else
                 {
-                    @_backups.LastBackupUtc.Value.ToLocalTime().ToString("G", CultureInfo.GetCultureInfo("fr-FR"))
-                    <span class="text-muted">(@_backups.LastBackupFileName)</span>
+                    <span class="text-danger fw-semibold">Erreur</span>
+                    @if (!string.IsNullOrEmpty(_dbError))
+                    {
+                        <div class="small text-danger mt-1">@_dbError</div>
+                    }
                 }
             </dd>
         </dl>
-    }
-
-    <h3 class="h6">Derniers logs Warning / Error</h3>
-    @if (_logLines.Count == 0)
-    {
-        <p class="text-muted">Aucun warning ni erreur dans le fichier Serilog du jour.</p>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-sm align-middle">
-                <thead>
-                    <tr>
-                        <th>Heure</th>
-                        <th>Niveau</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var line in _logLines)
-                    {
-                        <tr>
-                            <td class="text-nowrap">@line.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
-                            <td><span class="badge @(line.Level == "WRN" ? "text-bg-warning" : "text-bg-danger")">@line.Level</span></td>
-                            <td class="small">@line.Message</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+    </section>
+}
+else if (_tab == "supervision")
+{
+    <section>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h2 class="h5 mb-0">Supervision</h2>
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="RefreshSupervisionAsync">
+                Rafraîchir
+            </button>
         </div>
-    }
-</section>
+        @if (_supervisionAt is not null)
+        {
+            <p class="text-muted small mb-3">Dernière lecture @_supervisionAt.Value.ToLocalTime().ToString("G", CultureInfo.GetCultureInfo("fr-FR"))</p>
+        }
 
-<section>
-    <h2 class="h5 mb-3">Système</h2>
-    <dl class="row mb-0">
-        <dt class="col-sm-3">Environnement</dt>
-        <dd class="col-sm-9"><code>@HostEnvironment.EnvironmentName</code></dd>
-        <dt class="col-sm-3">Base de données</dt>
-        <dd class="col-sm-9">
-            @if (_dbOk)
-            {
-                <span class="text-success fw-semibold">Connecté</span>
-            }
-            else
-            {
-                <span class="text-danger fw-semibold">Erreur</span>
-                @if (!string.IsNullOrEmpty(_dbError))
-                {
-                    <div class="small text-danger mt-1">@_dbError</div>
-                }
-            }
-        </dd>
-    </dl>
-</section>
+        <h3 class="h6">Health checks</h3>
+        @if (_health is null)
+        {
+            <p class="text-muted">Aucun rapport pour le moment.</p>
+        }
+        else
+        {
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Statut</th>
+                            <th>Détail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _health.Entries)
+                        {
+                            <tr>
+                                <td><code>@entry.Key</code></td>
+                                <td><HealthStatusBadge Status="entry.Value.Status" /></td>
+                                <td class="small">@HealthStatusUi.Detail(entry.Value)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <h3 class="h6">Sauvegardes</h3>
+        @if (_backups is null)
+        {
+            <p class="text-muted">Dossier de sauvegarde illisible.</p>
+        }
+        else
+        {
+            <dl class="row mb-4">
+                <dt class="col-sm-4">Dossier</dt>
+                <dd class="col-sm-8"><code>@_backups.Path</code></dd>
+                <dt class="col-sm-4">Taille</dt>
+                <dd class="col-sm-8">@DiskSpaceHealthCheck.FormatSize(_backups.TotalBytes)</dd>
+                <dt class="col-sm-4">Fichiers quotidien_*.sql.gz</dt>
+                <dd class="col-sm-8">@_backups.FileCount</dd>
+                <dt class="col-sm-4">Dernière sauvegarde</dt>
+                <dd class="col-sm-8">
+                    @if (_backups.LastBackupUtc is null)
+                    {
+                        <span class="text-danger">Aucune</span>
+                    }
+                    else
+                    {
+                        @_backups.LastBackupUtc.Value.ToLocalTime().ToString("G", CultureInfo.GetCultureInfo("fr-FR"))
+                        <span class="text-muted"> (@_backups.LastBackupFileName)</span>
+                    }
+                </dd>
+            </dl>
+        }
+
+        <h3 class="h6">Derniers logs Warning / Error</h3>
+        @if (_logLines.Count == 0)
+        {
+            <p class="text-muted">Aucun warning ni erreur dans le fichier Serilog du jour.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Heure</th>
+                            <th>Niveau</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in _logLines)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@line.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                                <td>
+                                    <span class="badge @(line.Level == "WRN" ? "health-badge health-badge-warn" : "health-badge health-badge-ko")">
+                                        <span class="health-badge-icon" aria-hidden="true">@(line.Level == "WRN" ? "!" : "×")</span>
+                                        @line.Level
+                                    </span>
+                                </td>
+                                <td class="small">@line.Message</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
 
 @code {
+    [Parameter]
+    public string? Tab { get; set; }
+
     [Inject] private ModuleManager ModuleManager { get; set; } = default!;
     [Inject] private IDbContextFactory<AppDbContext> DbFactory { get; set; } = default!;
     [Inject] private UserManager<IdentityUser> UserManager { get; set; } = default!;
@@ -248,8 +277,16 @@
     [Inject] private HealthCheckService HealthChecks { get; set; } = default!;
     [Inject] private BackupFolderMonitor BackupFolder { get; set; } = default!;
     [Inject] private SerilogFileTail LogTail { get; set; } = default!;
+    [Inject] private HealthAlertState Alerts { get; set; } = default!;
     [Inject] private ILogger<Admin> Logger { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
 
+    private static readonly HashSet<string> KnownTabs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "modules", "utilisateurs", "systeme", "supervision"
+    };
+
+    private string _tab = "modules";
     private ISet<string> _activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private List<UserRow> _users = [];
     private bool _busy;
@@ -261,10 +298,60 @@
     private BackupFolderSnapshot? _backups;
     private IReadOnlyList<LogLine> _logLines = [];
     private DateTimeOffset? _supervisionAt;
+    private string? _loadedTab;
 
-    protected override async Task OnInitializedAsync()
+    private string TabTitle => _tab switch
     {
-        await RefreshSupervisionAsync();
+        "utilisateurs" => "Utilisateurs",
+        "systeme" => "Système",
+        "supervision" => "Supervision",
+        _ => "Modules"
+    };
+
+    protected override void OnInitialized() => Alerts.Changed += OnAlertsChanged;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Tab))
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
+        var requested = Tab.Trim().ToLowerInvariant();
+        if (!KnownTabs.Contains(requested))
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
+        _tab = requested;
+        var tabChanged = _loadedTab != _tab;
+        _loadedTab = _tab;
+
+        if (_health is null || (_tab == "supervision" && tabChanged))
+        {
+            await RefreshSupervisionAsync();
+        }
+
+        if (_tab is "modules")
+        {
+            await TryLoadModulesAsync();
+        }
+        else if (_tab is "utilisateurs")
+        {
+            await TryLoadUsersAsync();
+        }
+        else if (_tab is "systeme")
+        {
+            await CheckDatabaseAsync();
+        }
+    }
+
+    private void OnAlertsChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task TryLoadModulesAsync()
+    {
         try
         {
             await ReloadModulesAsync();
@@ -273,7 +360,10 @@
         {
             Logger.LogWarning(ex, "Impossible de charger les modules sur /admin");
         }
+    }
 
+    private async Task TryLoadUsersAsync()
+    {
         try
         {
             await LoadUsersAsync();
@@ -282,8 +372,6 @@
         {
             Logger.LogWarning(ex, "Impossible de charger les utilisateurs sur /admin");
         }
-
-        await CheckDatabaseAsync();
     }
 
     private async Task RefreshSupervisionAsync()
@@ -292,6 +380,7 @@
         try
         {
             _health = await HealthChecks.CheckHealthAsync();
+            Alerts.Apply(_health);
             _backups = BackupFolder.GetSnapshot();
             _logLines = LogTail.ReadRecentWarnings(20);
             _supervisionAt = DateTimeOffset.Now;
@@ -429,20 +518,6 @@
         }
     }
 
-    private static string HealthBadgeClass(HealthStatus status) => status switch
-    {
-        HealthStatus.Healthy => "text-bg-success",
-        HealthStatus.Degraded => "text-bg-warning",
-        _ => "text-bg-danger"
-    };
-
-    private static string HealthLabel(HealthStatus status) => status switch
-    {
-        HealthStatus.Healthy => "OK",
-        HealthStatus.Degraded => "Alerte",
-        _ => "KO"
-    };
-
     private void ShowToast(string message, bool success = true)
     {
         _toastMessage = message;
@@ -450,6 +525,8 @@
     }
 
     private void DismissToast() => _toastMessage = null;
+
+    public void Dispose() => Alerts.Changed -= OnAlertsChanged;
 
     private sealed class UserRow
     {

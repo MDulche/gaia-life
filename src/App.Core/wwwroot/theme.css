@@ -1,0 +1,20 @@
+/* Couleurs Gaia-Life : même thème que le manifeste PWA (theme_color / background_color). */
+:root {
+    --gaia-primary: #1b6ec2;
+    --gaia-primary-dark: #155a9c;
+    --gaia-on-primary: #ffffff;
+    --gaia-surface: #ffffff;
+    --gaia-sidebar-from: #1b6ec2;
+    --gaia-sidebar-to: #0d3a66;
+
+    --bs-primary: #1b6ec2;
+    --bs-primary-rgb: 27, 110, 194;
+    --bs-primary-text-emphasis: #0d3a66;
+    --bs-primary-bg-subtle: #d6e6f6;
+    --bs-primary-border-subtle: #9ec2e6;
+    --bs-link-color: #1b6ec2;
+    --bs-link-color-rgb: 27, 110, 194;
+    --bs-link-hover-color: #155a9c;
+    --bs-link-hover-color-rgb: 21, 90, 156;
+    --bs-focus-ring-color: rgba(27, 110, 194, 0.25);
+}

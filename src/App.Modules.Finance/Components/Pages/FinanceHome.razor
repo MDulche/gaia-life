@@ -40,6 +40,7 @@
                         <div class="col-md-4">
                             <label class="form-label" for="compte-solde">Solde initial (€)</label>
                             <InputNumber id="compte-solde" class="form-control" @bind-Value="_newAccount.SoldeInitial" />
+                            <ValidationMessage For="() => _newAccount.SoldeInitial" />
                         </div>
                         <div class="col-md-2">
                             <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Créer</button>
@@ -143,7 +144,7 @@
     private sealed class NewAccountModel
     {
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
-        [System.ComponentModel.DataAnnotations.MaxLength(128)]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
         public string Nom { get; set; } = string.Empty;
 
         public decimal SoldeInitial { get; set; }

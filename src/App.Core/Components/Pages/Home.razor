@@ -1,5 +1,6 @@
 ﻿@page "/"
 @* Accueil : widgets et raccourcis des modules actifs. notice=module-disabled après un accès URL à un module off. *@
+@implements IDisposable
 @using System.Globalization
 @using System.Security.Claims
 
@@ -23,11 +24,32 @@ else
         <p class="text-muted mb-0">Bonjour @_userName — @_today</p>
     </header>
 
+    <AuthorizeView Roles="@AppRoles.Admin">
+        <Authorized>
+            @if (Alerts.HasAlert)
+            {
+                <div class="alert @HealthStatusUi.AlertClass(Alerts.Status) d-flex flex-wrap align-items-start gap-2 mb-4" role="status">
+                    <HealthStatusBadge Status="Alerts.Status" />
+                    <div class="flex-grow-1">
+                        <strong>Alertes système.</strong>
+                        @Alerts.Summary
+                        <a class="alert-link d-inline-block ms-1" href="/admin/supervision">Ouvrir la supervision</a>
+                    </div>
+                </div>
+            }
+        </Authorized>
+    </AuthorizeView>
+
     @if (_activeModules.Count == 0)
     {
-        <div class="empty-modules d-flex flex-column align-items-center justify-content-center text-center py-5">
-            <p class="fs-5 mb-3">Aucun module actif pour le moment.</p>
-            <button type="button" class="btn btn-primary" @onclick="GoToAdmin">Aller à l'administration</button>
+        <div class="widgets-grid">
+            <div class="widget-card card shadow-sm">
+                <div class="card-body text-center py-5">
+                    <p class="fs-5 mb-3">Aucun module actif pour le moment.</p>
+                    <p class="text-muted mb-4">Un administrateur peut les activer depuis l'administration.</p>
+                    <button type="button" class="btn btn-primary" @onclick="GoToAdmin">Aller à l'administration</button>
+                </div>
+            </div>
         </div>
     }
     else
@@ -39,11 +61,7 @@ else
                 <div class="widgets-grid">
                     @foreach (var module in _widgetModules)
                     {
-                        <div class="widget-card card shadow-sm">
-                            <div class="card-body">
-                                <DynamicComponent Type="module.HomeWidgetComponent" />
-                            </div>
-                        </div>
+                        <DynamicComponent Type="module.HomeWidgetComponent" />
                     }
                 </div>
             </section>
@@ -77,6 +95,9 @@ else
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
 
+    [Inject]
+    private HealthAlertState Alerts { get; set; } = default!;
+
     [SupplyParameterFromQuery]
     private string? Notice { get; set; }
 
@@ -88,20 +109,35 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        Alerts.Changed += OnAlertsChanged;
         var authState = await AuthenticationStateTask;
         _userName = authState.User.Identity?.Name
             ?? authState.User.FindFirst(ClaimTypes.Email)?.Value
             ?? "utilisateur";
         _today = DateTime.Now.ToString("D", CultureInfo.GetCultureInfo("fr-FR"));
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db);
-        _activeModules = ModuleManager.GetActiveModules(activeKeys);
-        _widgetModules = _activeModules.Where(m => m.HomeWidgetComponent is not null).ToList();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            await using var db = await DbFactory.CreateDbContextAsync(cts.Token);
+            var activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db, cts.Token);
+            _activeModules = ModuleManager.GetActiveModules(activeKeys);
+            _widgetModules = _activeModules.Where(m => m.HomeWidgetComponent is not null).ToList();
+        }
+        catch (Exception)
+        {
+            _activeModules = [];
+            _widgetModules = [];
+        }
+
         _loading = false;
     }
 
-    private void GoToAdmin() => Navigation.NavigateTo("/admin");
+    private void OnAlertsChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void GoToAdmin() => Navigation.NavigateTo("/admin/modules");
 
     private void OpenModule(IAppModule module) => Navigation.NavigateTo(module.RootRoute);
+
+    public void Dispose() => Alerts.Changed -= OnAlertsChanged;
 }

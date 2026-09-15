@@ -41,10 +41,12 @@
                         <div class="col-md-4">
                             <label class="form-label" for="emp-debut">Date de début</label>
                             <InputDate id="emp-debut" class="form-control" @bind-Value="_nouveau.DateDebut" />
+                            <ValidationMessage For="() => _nouveau.DateDebut" />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label" for="emp-fin">Date de fin (optionnel)</label>
                             <InputDate id="emp-fin" class="form-control" @bind-Value="_nouveau.DateFin" />
+                            <ValidationMessage For="() => _nouveau.DateFin" />
                             <div class="form-text">Laissez vide si l'emploi est en cours.</div>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
@@ -147,10 +149,10 @@
         }
     }
 
-    private sealed class NewEmployeurModel
+    private sealed class NewEmployeurModel : System.ComponentModel.DataAnnotations.IValidatableObject
     {
         [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
-        [System.ComponentModel.DataAnnotations.MaxLength(128)]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
         public string Nom { get; set; } = string.Empty;
 
         public string? Adresse { get; set; }
@@ -160,5 +162,16 @@
         public DateTime? DateFin { get; set; }
 
         public static NewEmployeurModel Create() => new() { DateDebut = DateTime.Today };
+
+        public IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult> Validate(
+            System.ComponentModel.DataAnnotations.ValidationContext validationContext)
+        {
+            if (DateFin is { } fin && fin.Date < DateDebut.Date)
+            {
+                yield return new System.ComponentModel.DataAnnotations.ValidationResult(
+                    "La date de fin ne peut pas être antérieure à la date de début.",
+                    [nameof(DateFin)]);
+            }
+        }
     }
 }

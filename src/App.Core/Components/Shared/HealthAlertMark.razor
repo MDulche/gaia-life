@@ -1,0 +1,24 @@
+@implements IDisposable
+@* Pictogramme d'alerte (menu et onglet Supervision), mis à jour par le publisher. *@
+@if (Alerts.HasAlert)
+{
+    <span class="health-alert-mark @MarkClass" title="@Alerts.Summary" role="status">
+        <span aria-hidden="true">@HealthStatusUi.Icon(Alerts.Status)</span>
+        <span class="visually-hidden">Alerte système : @Alerts.Summary</span>
+    </span>
+}
+
+@code {
+    [Inject]
+    private HealthAlertState Alerts { get; set; } = default!;
+
+    private string MarkClass => Alerts.Status == Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded
+        ? "health-alert-mark-warn"
+        : "health-alert-mark-ko";
+
+    protected override void OnInitialized() => Alerts.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Alerts.Changed -= OnChanged;
+}

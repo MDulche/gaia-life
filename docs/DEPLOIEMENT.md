@@ -15,6 +15,7 @@
 11. [Rollback](#rollback)
 12. [Vérification phase 4](#vérification-phase-4)
 13. [Vérification phase 5](#vérification-phase-5)
+14. [Vérification phase 6](#vérification-phase-6)
 
 ## Fichiers d'environnement
 
@@ -191,7 +192,7 @@ Gaia-Life est une application **mono-foyer** : Finances et Travail sont des donn
 
 Les rôles servent à l'administration de l'app, pas à isoler les données :
 
-- **Admin** : page `/admin`, activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
+- **Admin** : pages `/admin/modules`, `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
 - **Membre** / **Lecture** : accès aux modules actifs, sans les boutons Valider / Refuser.
 
 Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une notion de foyer (ou `UserId`) sur les agrégats, ce qui n'existe pas aujourd'hui.
@@ -301,7 +302,17 @@ Un *publisher* exécute les checks toutes les **15 s** (après 5 s au démarrage
 | `espace-disque` | Espace libre du volume de `/backups` **< 1 Gio** (`HealthChecks:DiskUnhealthyBytes`) | Sous **5 Gio** (`DiskWarningBytes`) | Au-dessus de 5 Gio |
 | `derniere-sauvegarde` | Aucun `quotidien_*.sql.gz`, dossier absent, ou dump le plus récent **> 26 h** (`BackupMaxAgeHours`, marge sur le cron `0 3 * * *`) | — | Dump plus récent que 26 h |
 
-La page `/admin` (rôle Admin), section **Supervision** : badges Vert / Orange / Rouge, 20 dernières lignes Warning/Error du fichier du jour, taille et nombre de dumps, bouton **Rafraîchir** (circuit Blazor, sans recharger la page).
+La page `/admin/supervision` (rôle Admin) : badges Vert / Orange / Rouge **avec icône** (coche / point d'exclamation / croix), 20 dernières lignes Warning/Error du fichier du jour, taille et nombre de dumps, bouton **Rafraîchir** (circuit Blazor, sans recharger la page). Un point d'alerte apparaît aussi sur l'entrée **Administration** du menu et sur l'onglet Supervision dès qu'un check n'est pas Healthy.
+
+Raccourcis d'urgence (favoris, téléphone) :
+
+| URL | Onglet |
+| --- | --- |
+| `/admin` | Redirige vers `/admin/modules` |
+| `/admin/modules` | Activer / désactiver Finance et Travail |
+| `/admin/utilisateurs` | Rôles Identity |
+| `/admin/systeme` | Environnement et ping MariaDB |
+| `/admin/supervision` | Health checks, dumps, logs WRN/ERR |
 
 Pour un test rapide du check sauvegarde sans attendre 26 h : `HealthChecks__BackupMaxAgeHours=0.01` le temps du test, ou reculer la date du fichier (`touch -d '2 days ago'` dans le conteneur, ou `LastWriteTime` sur l'hôte Windows).
 
@@ -388,6 +399,20 @@ Le déploiement prod reste **manuel** (pas de webhook).
 | Serilog fichier | Fichier du jour sur l'hôte | `Get-ChildItem logs` (Windows) ou `ls -l logs/` ; ouvrir `logs/gaia-YYYYMMDD.log` |
 | `/health/live` | `ok`, HTTP 200 même si un dump a du retard | `curl.exe --ssl-no-revoke https://127.0.0.1/health/live` ou `http://localhost:8080/health/live` |
 | `/health` | JSON `entries.mariadb`, `espace-disque`, `derniere-sauvegarde` | Même URL sans `/live` |
-| MariaDB coupée | `mariadb` Unhealthy, badge rouge `/admin`, logs WRN/ERR | Déjà connecté sur `/admin` ; `docker compose ... stop mariadb` ; **Rafraîchir** sous 15–20 s ; puis `start mariadb` |
+| MariaDB coupée | `mariadb` Unhealthy, badge rouge `/admin/supervision`, logs WRN/ERR | Déjà connecté sur `/admin/supervision` ; `docker compose ... stop mariadb` ; **Rafraîchir** sous 15–20 s ; puis `start mariadb` |
 | Sauvegarde trop vieille | `derniere-sauvegarde` Unhealthy | Reculer `LastWriteTime` d'un `quotidien_*.sql.gz` de 27 h, Rafraîchir ; restaurer la date ensuite |
-| Supervision | 20 lignes WRN/ERR + stats `/backups` | Section Supervision de `/admin` après les deux tests ci-dessus |
+| Supervision | 20 lignes WRN/ERR + stats `/backups` | Onglet `/admin/supervision` après les deux tests ci-dessus |
+
+## Vérification phase 6
+
+À relire après un changement de navigation / accueil / onglets admin :
+
+| Volet | Attendu | Comment vérifier |
+| --- | --- | --- |
+| Sidebar desktop | Section Modules + Administration en bas, bouton « replier » | Viewport ≥ 641 px ; le menu réduit n'affiche plus que les icônes. |
+| Hamburger | Menu fermé par défaut, ouverture au pictogramme | Viewport 375 px ; Accueil, Finance, Travail, Administration accessibles. |
+| Menu si MariaDB coupée | Accueil / Administration restent visibles | `docker compose ... stop mariadb` ; le menu ne doit pas afficher d'erreur 500. |
+| Onglets `/admin` | 4 URLs distinctes | `/admin/modules`, `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
+| Badge alerte | Point sur Administration + onglet Supervision | Couper MariaDB : le pictogramme × apparaît ; au retour de la base, il disparaît (≤ 15 s ou Rafraîchir). |
+| Widgets | `WidgetCard` commun, grille 2 / 1 colonnes | Accueil : cartes Finance et Travail mêmes titres / métriques ; 375 px = une colonne. |
+| État vide | Carte unique dans la grille, bouton vers `/admin/modules` | Désactiver les modules, ou couper MariaDB : le menu Accueil / Administration reste affiché. |

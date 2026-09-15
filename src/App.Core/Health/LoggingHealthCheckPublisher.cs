@@ -11,15 +11,22 @@ public sealed class LoggingHealthCheckPublisher : IHealthCheckPublisher
 {
     private readonly ILogger<LoggingHealthCheckPublisher> _logger;
     private readonly GaiaHealthOptions _options;
+    private readonly HealthAlertState _alerts;
 
-    public LoggingHealthCheckPublisher(ILogger<LoggingHealthCheckPublisher> logger, IOptions<GaiaHealthOptions> options)
+    public LoggingHealthCheckPublisher(
+        ILogger<LoggingHealthCheckPublisher> logger,
+        IOptions<GaiaHealthOptions> options,
+        HealthAlertState alerts)
     {
         _logger = logger;
         _options = options.Value;
+        _alerts = alerts;
     }
 
     public Task PublishAsync(HealthReport report, CancellationToken cancellationToken)
     {
+        _alerts.Apply(report);
+
         foreach (var (name, entry) in report.Entries)
         {
             if (entry.Status == HealthStatus.Healthy)

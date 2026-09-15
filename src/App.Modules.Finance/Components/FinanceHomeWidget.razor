@@ -2,18 +2,14 @@
 @using System.Globalization
 @inject FinanceService Finance
 
-<div>
-    <h3 class="h6 text-muted mb-2">
-        <span class="module-icon bi-cash-coin me-1" aria-hidden="true"></span>
-        Finances
-    </h3>
+<WidgetCard Title="Finances" Icon="bi-cash-coin">
     @if (_loading)
     {
         <p class="text-muted mb-0">Chargement…</p>
     }
     else
     {
-        <p class="fs-4 mb-3">@FinanceFormat.Euro(_soldeTotal)</p>
+        <p class="widget-metric mb-3">@FinanceFormat.Euro(_soldeTotal)</p>
         @if (_dernieres.Count == 0)
         {
             <p class="text-muted small mb-0">Aucune transaction récente.</p>
@@ -36,7 +32,7 @@
             </ul>
         }
     }
-</div>
+</WidgetCard>
 
 @code {
     private bool _loading = true;
