@@ -8,6 +8,7 @@ using App.Shared.Modules;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,15 @@ builder.Services.AddDataProtection()
     .SetApplicationName("GaiaLife")
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeys));
 
+// Nginx (réseau Docker) envoie X-Forwarded-Proto=https : Identity et HSTS
+// voient une origine sûre alors que Kestrel n'écoute qu'en HTTP.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
@@ -74,6 +84,8 @@ moduleManager.ConfigureAllServices(builder.Services);
 builder.Services.AddSingleton(moduleManager);
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 var french = new CultureInfo("fr-FR");
 CultureInfo.DefaultThreadCurrentCulture = french;

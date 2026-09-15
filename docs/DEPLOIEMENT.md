@@ -4,7 +4,7 @@
 
 1. [Fichiers d'environnement](#fichiers-denvironnement)
 2. [Environnement de développement](#environnement-de-développement)
-3. [HTTPS et PWA](#https-et-pwa)
+3. [HTTPS, reverse proxy et PWA](#https-et-pwa)
 4. [Migrations EF Core](#migrations-ef-core)
 5. [DbContext : Identity Scoped et factories métier](#dbcontext--identity-scoped-et-factories-métier)
 6. [Données : foyer partagé](#données--foyer-partagé-pas-de-cloisonnement-par-utilisateur)
@@ -50,7 +50,7 @@ dotnet ef database update --context FinanceDbContext --project src/App.Modules.F
 dotnet ef database update --context TravailDbContext --project src/App.Modules.Travail --startup-project src/App.Core
 ```
 
-L'application est ensuite disponible sur http://localhost:8080.
+L'application est ensuite disponible sur http://localhost:8080. Avec le reverse proxy (certificats mkcert générés, voir ci-dessous) : https://gaia.local ou https://\<IP-LAN\>.
 
 En développement, le service worker PWA **n'est pas** enregistré (hot-reload). Le manifeste et les icônes sont tout de même servis.
 
@@ -61,37 +61,93 @@ Les Service Workers et l'installation « Ajouter à l'écran d'accueil » n'agis
 | Contexte | Origine | Comportement |
 | --- | --- | --- |
 | `dotnet run` profil `https` (`launchSettings.json`) | `https://localhost:7078` | Certificat de développement .NET. Service worker seulement si `ASPNETCORE_ENVIRONMENT` n'est pas `Development`. |
-| Docker dev (`:8080`) | `http://localhost:8080` | `localhost` est une exception Chrome/Firefox pour tester le manifeste. Pas de SW en Development. |
-| Production (téléphone / domaine réel) | HTTPS obligatoire | Terminer le TLS **devant** le conteneur (HTTP interne `:8080`). |
+| Docker, HTTP direct | `http://localhost:8080` | `localhost` est une exception Chrome/Firefox. Pas de SW en Development. |
+| Homelab (téléphones du LAN) | `https://gaia.local` ou `https://<IP-LAN>` | Nginx termine le TLS (mkcert), Kestrel reste en HTTP `:8080`. |
+| Production avec nom public | HTTPS Let's Encrypt | Même Nginx, certificats certbot à la place de mkcert. |
 
-Dans Docker, `app-core` n'écoute **pas** en HTTPS : `UseHttpsRedirection` est désactivé si `DOTNET_RUNNING_IN_CONTAINER=true`. Le certificat se pose sur le reverse proxy.
+Dans Docker, `app-core` n'écoute **pas** en HTTPS : `UseHttpsRedirection` est désactivé si `DOTNET_RUNNING_IN_CONTAINER=true`. Le TLS se termine sur le reverse proxy Nginx (`service` `proxy`). `app-core` lit `X-Forwarded-Proto` (`UseForwardedHeaders`) pour Identity / HSTS.
 
-Exemple **Nginx** + Let's Encrypt (certbot) devant le homelab :
+### Certificat mkcert
 
-```nginx
-server {
-    listen 443 ssl;
-    server_name gaia.exemple.fr;
+Sur le serveur homelab (une fois) :
 
-    ssl_certificate     /etc/letsencrypt/live/gaia.exemple.fr/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/gaia.exemple.fr/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
+```powershell
+# Windows
+.\scripts\generate-mkcert.ps1
 ```
 
-Avec **Traefik**, le même principe : routeur HTTPS, certificat Let's Encrypt (ou certificat interne si l'usage reste strictement local au LAN). Sans nom de domaine public, un certificat interne (mkcert, CA du homelab) installé sur les téléphones du foyer permet l'installation PWA.
+```bash
+# Linux
+chmod +x scripts/generate-mkcert.sh
+./scripts/generate-mkcert.sh
+```
+
+Le script installe mkcert si besoin, exécute `mkcert -install` (crée la CA locale et l'ajoute au magasin de l'hôte), puis génère `certs/gaia.pem` + `certs/gaia-key.pem` pour `gaia.local`, l'IP LAN détectée, `localhost` et `127.0.0.1`. Il copie aussi `certs/rootCA.pem` (partie **publique** de la CA) pour les téléphones.
+
+Si l'IP LAN n'est pas la bonne :
+
+```powershell
+.\scripts\generate-mkcert.ps1 -HostName gaia.local -LanIp 172.16.100.170
+```
+
+```bash
+GAIA_HOST=gaia.local GAIA_LAN_IP=172.16.100.170 ./scripts/generate-mkcert.sh
+```
+
+Les fichiers `certs/gaia-key.pem` et `rootCA-key.pem` (dans le répertoire `mkcert -CAROOT`) **ne doivent jamais être commités**. `certs/` est dans `.gitignore`.
+
+Sur l'hôte, pointez `gaia.local` vers la machine :
+
+```text
+# C:\Windows\System32\drivers\etc\hosts  ou  /etc/hosts
+127.0.0.1    gaia.local
+172.16.100.170 gaia.local
+```
+
+(remplacez l'IP par celle du serveur). Sur les téléphones, soit le routeur résout `gaia.local`, soit vous ouvrez `https://<IP-LAN>` (l'IP est dans le certificat).
+
+Ouvrez le pare-feu de l'hôte pour TCP 80 et 443 si les téléphones ne joignent pas le proxy (Windows : règle entrante « Gaia-Life HTTPS »).
+
+`curl` Windows (schannel) peut refuser le certificat mkcert (`CRYPT_E_NO_REVOCATION_CHECK`). Chrome et Edge font confiance à la CA après `mkcert -install`. Pour un test en ligne de commande : `curl.exe --ssl-no-revoke https://127.0.0.1/health`.
+
+Ensuite : `docker compose --env-file .env.dev -f docker-compose.dev.yml up -d` (ou `.env.prod` / `docker-compose.prod.yml`). Nginx écoute 80 (redirige vers HTTPS) et 443, et proxifie vers `app-core:8080` (WebSocket Blazor Server inclus). En production, le port 8080 n'est publié que sur `127.0.0.1`.
+
+### Let's Encrypt (domaine public)
+
+Si un nom de domaine public est disponible, remplacez les chemins de certificats Nginx par ceux de certbot, par exemple :
+
+```nginx
+ssl_certificate     /etc/letsencrypt/live/gaia.exemple.fr/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/gaia.exemple.fr/privkey.pem;
+```
+
+Traefik peut jouer le même rôle (routeur HTTPS + ACME) ; le dépôt livre Nginx, déjà branché dans Compose.
+
+### Installer rootCA.pem sur un téléphone
+
+Sans cette étape, Chrome / Safari affichent un avertissement (autorité inconnue). Copiez `certs/rootCA.pem` (ou `%LOCALAPPDATA%\mkcert\rootCA.pem` / `$(mkcert -CAROOT)/rootCA.pem`) via USB, e-mail, dossier partagé ou AirDrop. Ce fichier n'est **pas** la clé privée.
+
+**Android (Chrome)**
+
+1. Copiez `rootCA.pem` dans Téléchargements (renommez en `gaia-rootCA.crt` si le téléphone n'affiche pas le `.pem`).
+2. Paramètres → **Sécurité** (ou **Mots de passe et sécurité**) → **Chiffrement et identifiants** → **Installer un certificat** → **Certificat CA**.
+3. Acceptez l'avertissement « votre connexion ne sera plus privée » (CA utilisateur) et donnez un nom, ex. `Gaia-Life mkcert`.
+4. Ouvrez Chrome sur `https://gaia.local` ou `https://<IP-LAN>` : le cadenas doit être normal (pas « Non sécurisé »).
+5. Android 7+ : les applications hors Chrome ignorent souvent les CA utilisateur ; Chrome et le flux PWA suffisent pour Gaia-Life.
+
+**iPhone / iPad (Safari)**
+
+1. Envoyez `rootCA.pem` sur l'iPhone (AirDrop, Mail, Fichiers). Ouvrez-le.
+2. Une bannière **Profil téléchargé** apparaît. Allez dans Réglages → **Profil téléchargé** (ou **Général** → **VPN et gestion de l'appareil**) → **Installer** (code de l'appareil).
+3. Réglages → **Général** → **Informations** → **Réglages des certificats** (tout en bas) → activez **Faire pleinement confiance** pour la CA `mkcert …`.
+4. Safari → `https://gaia.local` ou `https://<IP-LAN>` : pas d'alerte de certificat.
+5. Partager → **Sur l'écran d'accueil** pour installer la PWA.
+
+Si l'IP du serveur change (DHCP), régénérez le certificat (`generate-mkcert`) et redémarrez `proxy` (`docker compose ... up -d proxy`).
 
 Hors Docker, le profil `https` de `src/App.Core/Properties/launchSettings.json` utilise le certificat de développement .NET (`dotnet dev-certs https --trust`).
 
-Installation téléphone (après HTTPS prod) :
+Installation PWA (après HTTPS reconnu comme sûr) :
 
 1. Android / Chrome : menu → **Ajouter à l'écran d'accueil** / **Installer l'application**. L'app s'ouvre en `display: standalone` (sans barre de navigateur).
 2. iOS / Safari : bouton Partager → **Sur l'écran d'accueil**. Safari ignore le service worker pour l'installation mais utilise `apple-touch-icon` et `apple-mobile-web-app-capable`.

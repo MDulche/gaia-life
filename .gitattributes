@@ -1,3 +1,4 @@
 * text=auto
 *.sh text eol=lf
 docker/mariadb-backup/entrypoint.sh text eol=lf
+docker/nginx/nginx.conf text eol=lf

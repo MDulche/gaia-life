@@ -14,6 +14,10 @@
 backups/*
 !backups/.gitkeep
 
+# Certificats mkcert (clé privée et CA locale, jamais commités)
+certs/*
+!certs/.gitkeep
+
 # ASP.NET Data Protection keys (dev Docker volume)
 .dataprotection-keys/
 

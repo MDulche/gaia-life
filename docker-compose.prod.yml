@@ -11,7 +11,7 @@ services:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       ConnectionStrings__Default: Server=mariadb;Port=3306;Database=${DB_NAME:-gaia_life};User=gaia;Password=${DB_PASSWORD:-changeme}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
     volumes:
       - ./backups:/backups
@@ -69,6 +69,21 @@ services:
       - ./scripts/backup.sh:/scripts/backup.sh:ro
     depends_on:
       mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - gaia
+
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      app-core:
         condition: service_healthy
     restart: unless-stopped
     networks:

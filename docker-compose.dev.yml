@@ -90,6 +90,20 @@ services:
     networks:
       - gaia
 
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - app-core
+    restart: unless-stopped
+    networks:
+      - gaia
+
 volumes:
   mariadb_data:
   nuget-cache:
