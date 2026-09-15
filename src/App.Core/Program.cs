@@ -88,10 +88,13 @@ app.UseRequestLocalization(new RequestLocalizationOptions
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    // HSTS n'a d'effet utile que si le navigateur atteint l'app en HTTPS
+    // (reverse proxy Let's Encrypt en prod, profil https hors Docker).
     app.UseHsts();
 }
 
-// Dans Docker l'app n'écoute qu'en HTTP : la redirection HTTPS casserait les appels sur :8080.
+// Dans Docker l'app n'écoute qu'en HTTP : la redirection HTTPS casserait :8080.
+// Le TLS se termine sur le reverse proxy (voir docs/DEPLOIEMENT.md).
 if (!string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase))
 {
     app.UseHttpsRedirection();
@@ -106,6 +109,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
+app.MapGet("/health", () => Results.Text("ok")).AllowAnonymous();
 app.MapRazorComponents<global::App.Core.Components.App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(

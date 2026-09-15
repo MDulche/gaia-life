@@ -1,5 +1,19 @@
 # Déploiement Gaia-Life
 
+## Table des matières
+
+1. [Fichiers d'environnement](#fichiers-denvironnement)
+2. [Environnement de développement](#environnement-de-développement)
+3. [HTTPS et PWA](#https-et-pwa)
+4. [Migrations EF Core](#migrations-ef-core)
+5. [DbContext : Identity Scoped et factories métier](#dbcontext--identity-scoped-et-factories-métier)
+6. [Données : foyer partagé](#données--foyer-partagé-pas-de-cloisonnement-par-utilisateur)
+7. [Sauvegarde et restauration](#sauvegarde-et-restauration)
+8. [GitHub Container Registry](#github-container-registry)
+9. [Mise à jour de production](#mise-à-jour-de-production)
+10. [Rollback](#rollback)
+11. [Vérification phase 4](#vérification-phase-4)
+
 ## Fichiers d'environnement
 
 Les fichiers `.env.dev` et `.env.prod` **ne doivent jamais être commités**. Ils sont déjà listés dans `.gitignore`.
@@ -37,6 +51,54 @@ dotnet ef database update --context TravailDbContext --project src/App.Modules.T
 ```
 
 L'application est ensuite disponible sur http://localhost:8080.
+
+En développement, le service worker PWA **n'est pas** enregistré (hot-reload). Le manifeste et les icônes sont tout de même servis.
+
+## HTTPS et PWA
+
+Les Service Workers et l'installation « Ajouter à l'écran d'accueil » n'agissent que sur une **origine sécurisée** :
+
+| Contexte | Origine | Comportement |
+| --- | --- | --- |
+| `dotnet run` profil `https` (`launchSettings.json`) | `https://localhost:7078` | Certificat de développement .NET. Service worker seulement si `ASPNETCORE_ENVIRONMENT` n'est pas `Development`. |
+| Docker dev (`:8080`) | `http://localhost:8080` | `localhost` est une exception Chrome/Firefox pour tester le manifeste. Pas de SW en Development. |
+| Production (téléphone / domaine réel) | HTTPS obligatoire | Terminer le TLS **devant** le conteneur (HTTP interne `:8080`). |
+
+Dans Docker, `app-core` n'écoute **pas** en HTTPS : `UseHttpsRedirection` est désactivé si `DOTNET_RUNNING_IN_CONTAINER=true`. Le certificat se pose sur le reverse proxy.
+
+Exemple **Nginx** + Let's Encrypt (certbot) devant le homelab :
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name gaia.exemple.fr;
+
+    ssl_certificate     /etc/letsencrypt/live/gaia.exemple.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gaia.exemple.fr/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+Avec **Traefik**, le même principe : routeur HTTPS, certificat Let's Encrypt (ou certificat interne si l'usage reste strictement local au LAN). Sans nom de domaine public, un certificat interne (mkcert, CA du homelab) installé sur les téléphones du foyer permet l'installation PWA.
+
+Hors Docker, le profil `https` de `src/App.Core/Properties/launchSettings.json` utilise le certificat de développement .NET (`dotnet dev-certs https --trust`).
+
+Installation téléphone (après HTTPS prod) :
+
+1. Android / Chrome : menu → **Ajouter à l'écran d'accueil** / **Installer l'application**. L'app s'ouvre en `display: standalone` (sans barre de navigateur).
+2. iOS / Safari : bouton Partager → **Sur l'écran d'accueil**. Safari ignore le service worker pour l'installation mais utilise `apple-touch-icon` et `apple-mobile-web-app-capable`.
+
+Le service worker met en cache uniquement les assets statiques (CSS, manifeste, icônes) en **network first**. Les pages Blazor Server / SignalR ne sont pas mises en cache. Hors ligne, une navigation affiche `offline.html` ; si l'app était déjà ouverte, le bandeau « Vous êtes hors ligne » et le modal de reconnexion Blazor s'affichent.
+
+Lighthouse 12 n'a plus de catégorie « PWA » (les audits d'installabilité sont dans l'onglet Application de Chrome). Contrôles à faire en **Production** (HTTPS ou `localhost`) : manifeste valide (`name`, `short_name`, `start_url`, `display: standalone`, icônes 192 et 512 PNG, icône maskable), service worker enregistré, `theme-color`, `apple-touch-icon`. En Development le SW n'est volontairement pas enregistré (hot-reload).
 
 ## Migrations EF Core
 
@@ -78,15 +140,139 @@ Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une 
 
 Ne pas résoudre `AppDbContext` dans un composant Blazor interactif pour les requêtes métier : passer par `IDbContextFactory<AppDbContext>`. Réserver le Scoped aux appels Identity.
 
-## Mise à jour de l'environnement de production
+## Sauvegarde et restauration
 
-Sur le serveur, à partir du clone du dépôt :
+Le service Compose `mariadb-backup` (image `mariadb:11.6` + cron) n'expose aucun port. Il attend que `mariadb` soit `healthy`, puis lance `scripts/backup.sh` selon `BACKUP_CRON_SCHEDULE` (défaut `0 3 * * *`, heure `TZ`, défaut `Europe/Paris`).
+
+Chaque dump :
+
+- utilise `mariadb-dump` / `mysqldump` sur `DB_NAME` (identifiants `DB_USER` / `DB_PASSWORD`, mêmes variables que `app-core`) ;
+- compresse en gzip ;
+- nomme le fichier `quotidien_YYYYMMDD_HHMMSS.sql.gz` dans le volume `./backups` (`/backups` dans le conteneur) ;
+- refuse un fichier vide ou gzip invalide (erreur visible dans `docker compose logs mariadb-backup`) ;
+- supprime les `quotidien_*.sql.gz` de plus de `BACKUP_RETENTION_DAYS` jours (défaut 14).
+
+### Sauvegarde manuelle
+
+Depuis la racine du dépôt (dev) :
+
+```bash
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec mariadb-backup sh scripts/backup.sh
+```
+
+Production :
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec mariadb-backup sh scripts/backup.sh
+```
+
+Vérifier le fichier sur l'hôte :
+
+```bash
+ls -l backups/quotidien_*.sql.gz
+gzip -t backups/quotidien_*.sql.gz
+```
+
+Logs en cas d'échec :
+
+```bash
+docker compose --env-file .env.dev -f docker-compose.dev.yml logs --tail=50 mariadb-backup
+```
+
+### Restauration
+
+`scripts/restore.sh` demande **OUI** (majuscules) avant d'écraser la base. Le fichier `.sql.gz` doit être accessible via le volume `./backups`.
+
+```bash
+# Dev (Git Bash / WSL / hôte Linux)
+COMPOSE_FILE=docker-compose.dev.yml ENV_FILE=.env.dev ./scripts/restore.sh backups/quotidien_YYYYMMDD_HHMMSS.sql.gz
+```
+
+Production :
+
+```bash
+COMPOSE_FILE=docker-compose.prod.yml ENV_FILE=.env.prod ./scripts/restore.sh backups/quotidien_YYYYMMDD_HHMMSS.sql.gz
+```
+
+Le script détecte aussi quel Compose est en cours s'il trouve un `mariadb` prod déjà démarré.
+
+Cycle de test recommandé :
+
+1. Créer une transaction Finance (ou une donnée visible).
+2. Lancer une sauvegarde manuelle.
+3. Supprimer la donnée depuis `/finance`.
+4. Restaurer le fichier `.sql.gz` (confirmation `OUI`).
+5. Recharger `/finance` : la donnée est revenue.
+
+## GitHub Container Registry
+
+L'image de production est :
+
+- `ghcr.io/mdulche/gaia-life:latest`
+- `ghcr.io/mdulche/gaia-life:<sha-court>` (7 premiers caractères du commit)
+
+Le workflow `.github/workflows/build.yml` construit, teste (s'il existe des projets de test), puis pousse ces deux tags **uniquement** sur un push vers `main` (pas les pull requests). Permissions requises : `packages: write` (déjà dans le workflow, via `GITHUB_TOKEN`).
+
+Le package GitHub apparaît sous le dépôt : **Packages** → `gaia-life`. La visibilité suit le dépôt (privé si le repo est privé). À ajuster dans les paramètres du package si vous voulez le rendre public.
+
+### Connexion Docker sur le serveur prod
+
+Le `GITHUB_TOKEN` de la CI ne sert **pas** sur le serveur. Créez un Personal Access Token (fine-grained ou classic) en **lecture seule** sur les packages (`read:packages`), distinct du token CI.
+
+```bash
+echo VOTRE_PAT | docker login ghcr.io -u mdulche --password-stdin
+```
+
+`docker-compose.prod.yml` référence `ghcr.io/mdulche/gaia-life:${APP_IMAGE_TAG:-latest}`. `APP_IMAGE_TAG` se règle dans `.env.prod` (exemple : `latest` ou un sha court pour pinner une version).
+
+Un `docker compose ... --build` local reste possible : Compose tague alors l'image construite avec le même nom.
+
+## Mise à jour de production
+
+Le déploiement prod est **manuel** : pas de webhook ni de mise à jour automatique. Cela évite une surprise sur l'infra du foyer.
+
+Sur le serveur, dans le clone du dépôt :
+
+```bash
+chmod +x scripts/deploy-prod.sh scripts/restore.sh scripts/backup.sh
+./scripts/deploy-prod.sh
+```
+
+Le script :
+
+1. `git pull origin main` (compose, Dockerfile, scripts).
+2. Sauvegarde MariaDB via `mariadb-backup` (`scripts/backup.sh`).
+3. `docker compose --env-file .env.prod -f docker-compose.prod.yml pull` (image GHCR).
+4. `docker compose ... up -d` (recrée les conteneurs dont l'image a changé).
+5. Attend que le healthcheck `app-core` (`GET /health`) soit `healthy`, code de retour non zéro sinon.
+
+Équivalent manuel historique (sans pull GHCR, reconstruction locale) :
 
 ```bash
 git pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
-Cette séquence récupère le code, reconstruit l'image de `App.Core` et redémarre les services (`restart: unless-stopped`). MariaDB n'est pas exposée hors du réseau Docker interne. Le volume `./backups` est monté sur `/backups`.
+MariaDB n'est pas exposée hors du réseau Docker interne. Le volume `./backups` est monté sur `/backups`.
 
-Après un schéma de base nouveau, appliquez les migrations avant ou juste après le redémarrage, selon votre procédure (par exemple `dotnet ef database update` depuis une machine autorisée, ou un job dédié).
+Après un schéma de base nouveau, les migrations s'appliquent au démarrage de `app-core` (`MigrateAsync`). Vous pouvez aussi lancer `dotnet ef database update` depuis une machine autorisée.
+
+## Rollback
+
+1. Identifier le sha court précédent (Packages GHCR ou `git log`).
+2. Sauvegarder l'état actuel (`scripts/backup.sh`) au cas où.
+3. Dans `.env.prod`, poser `APP_IMAGE_TAG=<sha-court-précédent>`.
+4. `docker compose --env-file .env.prod -f docker-compose.prod.yml pull && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d`
+5. Si le schéma de base a avancé et n'est plus compatible, restaurer aussi le dump d'avant la mise à jour (`scripts/restore.sh`), **après** confirmation `OUI`.
+
+## Vérification phase 4
+
+À relire après un déploiement réel (homelab + téléphone) :
+
+| Volet | Attendu | Comment vérifier |
+| --- | --- | --- |
+| PWA | Installation Android Chrome et, si possible, iOS Safari | HTTPS (proxy) ; menu « Ajouter à l'écran d'accueil » ; ouverture `standalone` sans barre d'URL. En Dev, le SW est absent (normal). |
+| Sauvegarde | Dump nocturne + restauration testée | `ls -l backups/` (horodatage le plus récent) ; cycle insert → dump → suppression → `restore.sh`. |
+| GHCR / déploiement | Image poussée, `deploy-prod.sh` OK | Après un push `main` : package `ghcr.io/mdulche/gaia-life`. Sur le serveur : `./scripts/deploy-prod.sh` (sauvegarde puis healthcheck `/health`). |
+
+Le déploiement prod reste **manuel** (pas de webhook).

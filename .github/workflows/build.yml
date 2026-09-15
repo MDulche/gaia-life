@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   build:
@@ -34,8 +35,22 @@ jobs:
             dotnet test GaiaLife.sln --configuration Release --no-build --verbosity normal
           fi
 
-      - name: Build Docker image
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          docker build -t "gaia-life:${SHORT_SHA}" .
-          echo "Image taguée gaia-life:${SHORT_SHA} (aucun push registre pour le moment)."
+          IMAGE="ghcr.io/mdulche/gaia-life"
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "${IMAGE}:latest" \
+            -t "${IMAGE}:${SHORT_SHA}" .
+          docker push "${IMAGE}:latest"
+          docker push "${IMAGE}:${SHORT_SHA}"
+          echo "Image poussée : ${IMAGE}:latest et ${IMAGE}:${SHORT_SHA}"

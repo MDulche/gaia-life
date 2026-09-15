@@ -13,6 +13,9 @@ RUN dotnet publish src/App.Core/App.Core.csproj -c Release -o /app/publish --no-
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 COPY --from=build /app/publish .

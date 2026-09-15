@@ -1,21 +1,52 @@
-﻿<!DOCTYPE html>
+﻿@inject IWebHostEnvironment HostEnvironment
+<!DOCTYPE html>
 <html lang="fr">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1b6ec2" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Gaia" />
     <base href="/" />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["App.Core.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="apple-touch-icon" href="icons/icon-180.png" />
+    <link rel="manifest" href="manifest.json" />
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body>
     <Routes @rendermode="PageRenderMode" />
+    <div id="gaia-offline-banner" hidden role="status">
+        Vous êtes hors ligne. Gaia-Life a besoin du serveur pour fonctionner.
+    </div>
+    <div id="components-reconnect-modal">
+        <p class="reconnect-show-msg">
+            Vous êtes hors ligne. Reconnexion au serveur…
+            (<span id="components-reconnect-current-attempt"></span>
+            / <span id="components-reconnect-max-retries"></span>)
+        </p>
+        <p class="reconnect-failed-msg">
+            Le serveur est injoignable.
+            <button type="button" onclick="location.reload()">Réessayer</button>
+        </p>
+        <p class="reconnect-rejected-msg">
+            La session a expiré.
+            <button type="button" onclick="location.reload()">Recharger</button>
+        </p>
+    </div>
     <script src="_framework/blazor.web.js"></script>
+    <script src="offline-banner.js"></script>
+    @if (!HostEnvironment.IsDevelopment())
+    {
+        <script src="registerServiceWorker.js"></script>
+    }
 </body>
 
 </html>
