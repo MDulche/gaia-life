@@ -1,0 +1,124 @@
+@page "/travail/employeurs/{Id:int}/solde-conges"
+@* Saisie manuelle des jours acquis ; les jours pris restent calculés. *@
+@attribute [Authorize]
+@inject TravailService Travail
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Solde de congés</PageTitle>
+
+@if (_ready && _employeur is not null)
+{
+    <p class="mb-1"><a href="@($"/travail/employeurs/{Id}")">← @_employeur.Nom</a></p>
+    <h1 class="h3 mb-4">Solde de congés</h1>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    @if (!string.IsNullOrEmpty(_toast))
+    {
+        <div class="alert alert-success" role="status">@_toast</div>
+    }
+
+    <p class="text-muted">
+        Saisissez les jours acquis pour rattraper l'historique. Les jours pris sont calculés à partir des congés validés de l'année.
+    </p>
+
+    <EditForm Model="_form" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+        <div class="row g-3 align-items-end mb-4">
+            <div class="col-md-3">
+                <label class="form-label" for="solde-annee">Année</label>
+                <InputNumber id="solde-annee" class="form-control" @bind-Value="_form.Annee" @bind-Value:after="ReloadSoldeAsync" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="solde-acquis">Jours acquis</label>
+                <InputNumber id="solde-acquis" class="form-control" @bind-Value="_form.JoursAcquis" />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Enregistrer</button>
+            </div>
+        </div>
+    </EditForm>
+
+    @if (_solde is not null)
+    {
+        <dl class="row">
+            <dt class="col-sm-3">Jours acquis</dt>
+            <dd class="col-sm-9">@TravailFormat.Jours(_solde.JoursAcquis)</dd>
+            <dt class="col-sm-3">Jours pris (validés)</dt>
+            <dd class="col-sm-9">@TravailFormat.Jours(_solde.JoursPris)</dd>
+            <dt class="col-sm-3">Reste</dt>
+            <dd class="col-sm-9"><strong>@TravailFormat.Jours(_solde.JoursRestants)</strong></dd>
+        </dl>
+    }
+}
+else if (_ready)
+{
+    <p class="text-muted">Employeur introuvable. <a href="/travail">Retour</a></p>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private bool _ready;
+    private bool _busy;
+    private string? _error;
+    private string? _toast;
+    private Employeur? _employeur;
+    private SoldeCongesInfo? _solde;
+    private SoldeForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await TravailAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        _form.Annee = DateTime.Today.Year;
+        _employeur = await Travail.GetEmployeurAsync(Id);
+        if (_employeur is not null)
+        {
+            await ReloadSoldeAsync();
+        }
+
+        _ready = true;
+    }
+
+    private async Task ReloadSoldeAsync()
+    {
+        _solde = await Travail.SoldeCongesActuel(Id, _form.Annee);
+        _form.JoursAcquis = _solde.JoursAcquis;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        try
+        {
+            await Travail.EnregistrerJoursAcquisAsync(Id, _form.Annee, _form.JoursAcquis);
+            await ReloadSoldeAsync();
+            _toast = "Solde enregistré.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class SoldeForm
+    {
+        public int Annee { get; set; }
+        public decimal JoursAcquis { get; set; }
+    }
+}

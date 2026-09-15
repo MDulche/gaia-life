@@ -28,11 +28,12 @@ docker compose --env-file .env.dev -f docker-compose.dev.yml up
 docker compose -f docker-compose.dev.yml up
 ```
 
-Au premier démarrage, l'application applique aussi les migrations EF Core automatiquement (Identity / `AppDbContext`, puis `FinanceDbContext` si le module Finances est enregistré), puis crée les rôles `Admin`, `Membre` et `Lecture`. Vous pouvez également les appliquer à la main depuis l'hôte (MariaDB doit être joignable sur `localhost:3306`) :
+Au premier démarrage, l'application applique aussi les migrations EF Core automatiquement (Identity / `AppDbContext`, puis `FinanceDbContext` et `TravailDbContext` si ces modules sont enregistrés), puis crée les rôles `Admin`, `Membre` et `Lecture`. Vous pouvez également les appliquer à la main depuis l'hôte (MariaDB doit être joignable sur `localhost:3306`) :
 
 ```bash
 dotnet ef database update --project src/App.Core --startup-project src/App.Core
 dotnet ef database update --context FinanceDbContext --project src/App.Modules.Finance --startup-project src/App.Core
+dotnet ef database update --context TravailDbContext --project src/App.Modules.Travail --startup-project src/App.Core
 ```
 
 L'application est ensuite disponible sur http://localhost:8080.
@@ -45,6 +46,7 @@ Migrations appliquées par l'application au démarrage :
 | --- | --- | --- |
 | `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate` |
 | `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance` |
+| `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail` |
 
 Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suffit en développement (`MigrateAsync`). En production, le même mécanisme s'exécute au démarrage du conteneur ; vous pouvez aussi lancer les commandes `dotnet ef database update` ci-dessus depuis une machine autorisée.
 
@@ -57,9 +59,22 @@ Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suf
 
 Un contexte Identity séparé n'a pas été créé : les tables utilisateurs/rôles sont déjà dans `AppDbContext` (`IdentityDbContext`). Le double enregistrement (factory métier + Scoped Identity) est plus simple qu'un second contexte, et suit le modèle recommandé par EF Core.
 
-`FinanceDbContext` n'est enregistré **que** via `AddDbContextFactory<FinanceDbContext>`. `FinanceService` n'injecte plus le contexte directement.
+`FinanceDbContext` et `TravailDbContext` ne sont enregistrés **que** via `AddDbContextFactory<T>`. `FinanceService` et `TravailService` n'injectent pas le contexte directement.
 
-Les deux factories réutilisent `GaiaMariaDb` (Pomelo `EnableRetryOnFailure`, MariaDB 11.6).
+Les factories réutilisent `GaiaMariaDb` (Pomelo `EnableRetryOnFailure`, MariaDB 11.6).
+
+Dans Travail, `SoldeConges.JoursPris` n'est **pas** persisté : il est calculé à partir des congés au statut `Valide` de l'année (`DateDebut`). Seul `JoursAcquis` est stocké (page `/travail/employeurs/{id}/solde-conges`).
+
+## Données : foyer partagé, pas de cloisonnement par utilisateur
+
+Gaia-Life est une application **mono-foyer** : Finances et Travail sont des données du foyer, visibles et saisissables par tout compte authentifié (Admin, Membre, Lecture). Il n'y a pas de filtrage « cet utilisateur ne voit que ses fiches de paie / ses employeurs ».
+
+Les rôles servent à l'administration de l'app, pas à isoler les données :
+
+- **Admin** : page `/admin`, activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
+- **Membre** / **Lecture** : accès aux modules actifs, sans les boutons Valider / Refuser.
+
+Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une notion de foyer (ou `UserId`) sur les agrégats, ce qui n'existe pas aujourd'hui.
 
 Ne pas résoudre `AppDbContext` dans un composant Blazor interactif pour les requêtes métier : passer par `IDbContextFactory<AppDbContext>`. Réserver le Scoped aux appels Identity.
 

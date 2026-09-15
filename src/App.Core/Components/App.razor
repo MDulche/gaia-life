@@ -24,6 +24,10 @@
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
+    /// <summary>
+    /// Login / Error restent en rendu statique (cookies Identity).
+    /// Le reste de l'app est en Interactive Server (formulaires, menu).
+    /// </summary>
     private IComponentRenderMode? PageRenderMode
     {
         get

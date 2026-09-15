@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace App.Core.Identity;
 
+/// <summary>
+/// Applique les migrations Identity puis crée les rôles.
+/// Les comptes admin/test ne sont créés qu'en <c>Development</c> (jamais en production).
+/// </summary>
 public static class IdentitySeeder
 {
     public static async Task SeedAsync(IServiceProvider services)
@@ -54,6 +58,7 @@ public static class IdentitySeeder
             AppRoles.Membre);
     }
 
+    /// <summary>Crée le compte s'il n'existe pas encore ; ne réécrit pas un utilisateur déjà présent.</summary>
     private static async Task EnsureDevelopmentUserAsync(
         UserManager<IdentityUser> userManager,
         ILogger logger,

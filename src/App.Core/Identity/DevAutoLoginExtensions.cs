@@ -2,6 +2,11 @@ using Microsoft.AspNetCore.Identity;
 
 namespace App.Core.Identity;
 
+/// <summary>
+/// Auto-connexion du compte admin de seed.
+/// Strictement limité à <see cref="IWebHostEnvironment.IsDevelopment"/> : impossible à activer en production
+/// même si <c>SeedAdmin:AutoLogin</c> est à true.
+/// </summary>
 public static class DevAutoLoginExtensions
 {
     public static IApplicationBuilder UseDevAutoLogin(this IApplicationBuilder app)
@@ -50,10 +55,12 @@ public static class DevAutoLoginExtensions
                 return;
             }
 
+            // Le cookie n'est pris en compte qu'après une redirection HTTP.
             context.Response.Redirect(GetRedirectTarget(context));
         });
     }
 
+    /// <summary>Ignore les assets Blazor/statiques et la déconnexion (sinon boucle de reconnexion).</summary>
     private static bool ShouldSkip(PathString path)
     {
         if (path.StartsWithSegments("/_blazor")

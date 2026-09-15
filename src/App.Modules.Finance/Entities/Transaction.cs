@@ -1,5 +1,9 @@
 namespace App.Modules.Finance.Entities;
 
+/// <summary>
+/// Mouvement sur un compte. <see cref="Montant"/> est toujours positif ;
+/// le signe vient de <see cref="Type"/>.
+/// </summary>
 public class Transaction
 {
     public int Id { get; set; }

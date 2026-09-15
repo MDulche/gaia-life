@@ -1,0 +1,413 @@
+@page "/travail/employeurs/{Id:int}"
+@* Fiches de paie et congés. Valider / Refuser visibles uniquement pour Admin. *@
+@attribute [Authorize]
+@inject TravailService Travail
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>@( _employeur?.Nom ?? "Employeur" )</PageTitle>
+
+@if (_ready && _employeur is not null)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+            <p class="mb-1"><a href="/travail">← Travail</a></p>
+            <h1 class="h3 mb-1">@_employeur.Nom</h1>
+            <p class="text-muted mb-0">
+                @_employeur.DateDebut.ToString("d")
+                — @(_employeur.DateFin?.ToString("d") ?? "en cours")
+                @if (_solde is not null)
+                {
+                    <span> · Solde @_solde.Annee : <strong>@TravailFormat.Jours(_solde.JoursRestants)</strong></span>
+                }
+            </p>
+        </div>
+        <a class="btn btn-outline-secondary" href="@($"/travail/employeurs/{Id}/solde-conges")">Solde de congés</a>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+            <button type="button" class="nav-link @(_tab == "paie" ? "active" : null)" @onclick='() => _tab = "paie"'>Fiches de paie</button>
+        </li>
+        <li class="nav-item">
+            <button type="button" class="nav-link @(_tab == "conges" ? "active" : null)" @onclick='() => _tab = "conges"'>Congés</button>
+        </li>
+    </ul>
+
+    @if (_tab == "paie")
+    {
+        <div class="d-flex justify-content-end mb-3">
+            <button type="button" class="btn btn-primary" @onclick="() => _showPaie = !_showPaie">Ajouter une fiche de paie</button>
+        </div>
+
+        @if (_showPaie)
+        {
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h6 mb-3">Nouvelle fiche de paie</h2>
+                    <EditForm Model="_fiche" OnValidSubmit="CreateFicheAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label" for="fiche-mois">Mois</label>
+                                <input id="fiche-mois" type="month" class="form-control" value="@_fiche.MoisInput"
+                                       @onchange="e => _fiche.MoisInput = e.Value?.ToString() ?? _fiche.MoisInput" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" for="fiche-brut">Salaire brut (€)</label>
+                                <InputNumber id="fiche-brut" class="form-control" @bind-Value="_fiche.SalaireBrut" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" for="fiche-net">Salaire net (€)</label>
+                                <InputNumber id="fiche-net" class="form-control" @bind-Value="_fiche.SalaireNet" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" for="fiche-cotis">Cotisations (€)</label>
+                                <InputNumber id="fiche-cotis" class="form-control" @bind-Value="_fiche.TotalCotisations" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="fiche-note">Note (optionnel)</label>
+                                <InputText id="fiche-note" class="form-control" @bind-Value="_fiche.Note" />
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Mois</th>
+                        <th class="text-end">Salaire brut</th>
+                        <th class="text-end">Salaire net</th>
+                        <th class="text-end">Cotisations</th>
+                        <th>Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_fiches.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="5" class="text-muted text-center">Aucune fiche de paie.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var fiche in _fiches)
+                        {
+                            <tr>
+                                <td>@TravailFormat.Mois(fiche.Mois)</td>
+                                <td class="text-end">@TravailFormat.Euro(fiche.SalaireBrut)</td>
+                                <td class="text-end">@TravailFormat.Euro(fiche.SalaireNet)</td>
+                                <td class="text-end">@TravailFormat.Euro(fiche.TotalCotisations)</td>
+                                <td>@(fiche.Note ?? "—")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+            <div>
+                <label class="form-label" for="filtre-statut">Statut</label>
+                <InputSelect id="filtre-statut" class="form-select" @bind-Value="_filtreStatut" @bind-Value:after="ReloadCongesAsync">
+                    <option value="">Tous</option>
+                    @foreach (var statut in Enum.GetValues<StatutConge>())
+                    {
+                        <option value="@statut">@TravailFormat.Statut(statut)</option>
+                    }
+                </InputSelect>
+            </div>
+            <button type="button" class="btn btn-primary" @onclick="() => _showConge = !_showConge">Demander un congé</button>
+        </div>
+
+        @if (_showConge)
+        {
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h6 mb-3">Nouvelle demande de congé</h2>
+                    <EditForm Model="_conge" OnValidSubmit="CreateCongeAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label" for="conge-type">Type</label>
+                                <InputSelect id="conge-type" class="form-select" @bind-Value="_conge.Type">
+                                    @foreach (var type in Enum.GetValues<TypeConge>())
+                                    {
+                                        <option value="@type">@TravailFormat.Type(type)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="conge-debut">Date de début</label>
+                                <InputDate id="conge-debut" class="form-control" @bind-Value="_conge.DateDebut" @bind-Value:after="RecalcJours" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="conge-fin">Date de fin</label>
+                                <InputDate id="conge-fin" class="form-control" @bind-Value="_conge.DateFin" @bind-Value:after="RecalcJours" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="conge-jours">Nombre de jours</label>
+                                <InputNumber id="conge-jours" class="form-control" @bind-Value="_conge.NombreJours" />
+                                <div class="form-text">Calculé en jours ouvrés (lun–ven). Ajustable pour une demi-journée.</div>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label" for="conge-com">Commentaire (optionnel)</label>
+                                <InputText id="conge-com" class="form-control" @bind-Value="_conge.Commentaire" />
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary" disabled="@_busy">Envoyer la demande</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th class="text-end">Jours</th>
+                        <th>Statut</th>
+                        <th>Commentaire</th>
+                        <AuthorizeView Roles="@TravailService.RoleAdmin">
+                            <Authorized>
+                                <th></th>
+                            </Authorized>
+                        </AuthorizeView>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_conges.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-muted text-center">Aucune demande de congé.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var conge in _conges)
+                        {
+                            <tr>
+                                <td>@TravailFormat.Type(conge.Type)</td>
+                                <td>@conge.DateDebut.ToString("d") — @conge.DateFin.ToString("d")</td>
+                                <td class="text-end">@TravailFormat.Jours(conge.NombreJours)</td>
+                                <td>
+                                    <span class="badge @TravailFormat.BadgeCss(conge.Statut)">@TravailFormat.Statut(conge.Statut)</span>
+                                </td>
+                                <td>@(conge.Commentaire ?? "—")</td>
+                                <AuthorizeView Roles="@TravailService.RoleAdmin">
+                                    <Authorized>
+                                        <td class="text-end text-nowrap">
+                                            @if (conge.Statut == StatutConge.EnAttente)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-success me-1" disabled="@_busy"
+                                                        @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Valide)">Valider</button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
+                                                        @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Refuse)">Refuser</button>
+                                            }
+                                        </td>
+                                    </Authorized>
+                                </AuthorizeView>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+else if (_ready)
+{
+    <p class="text-muted">Employeur introuvable. <a href="/travail">Retour</a></p>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private bool _ready;
+    private bool _busy;
+    private bool _showPaie;
+    private bool _showConge;
+    private string _tab = "paie";
+    private string? _error;
+    private string _filtreStatut = string.Empty;
+    private Employeur? _employeur;
+    private SoldeCongesInfo? _solde;
+    private List<FichePaie> _fiches = [];
+    private List<Conge> _conges = [];
+    private NewFicheModel _fiche = NewFicheModel.Create();
+    private NewCongeModel _conge = NewCongeModel.Create();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await TravailAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _error = null;
+        _employeur = await Travail.GetEmployeurAsync(Id);
+        if (_employeur is null)
+        {
+            return;
+        }
+
+        _solde = await Travail.SoldeCongesActuel(Id, DateTime.Today.Year);
+        _fiches = await Travail.ListerFichesPaie(Id);
+        await ReloadCongesAsync();
+    }
+
+    private async Task ReloadCongesAsync()
+    {
+        StatutConge? filtre = Enum.TryParse<StatutConge>(_filtreStatut, out var statut) ? statut : null;
+        _conges = await Travail.ListerConges(Id, filtre);
+    }
+
+    private void RecalcJours()
+    {
+        _conge.NombreJours = TravailCalendrier.CompterJoursOuvres(_conge.DateDebut, _conge.DateFin);
+    }
+
+    private async Task CreateFicheAsync()
+    {
+        if (!DateTime.TryParse(_fiche.MoisInput + "-01", out var mois))
+        {
+            _error = "Le mois est obligatoire.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Travail.AjouterFichePaie(new FichePaie
+            {
+                EmployeurId = Id,
+                Mois = mois,
+                SalaireBrut = _fiche.SalaireBrut,
+                SalaireNet = _fiche.SalaireNet,
+                TotalCotisations = _fiche.TotalCotisations,
+                DateEmission = DateTime.Now,
+                Note = _fiche.Note
+            });
+            _fiche = NewFicheModel.Create();
+            _showPaie = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CreateCongeAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Travail.DemanderConge(new Conge
+            {
+                EmployeurId = Id,
+                Type = _conge.Type,
+                DateDebut = _conge.DateDebut,
+                DateFin = _conge.DateFin,
+                NombreJours = _conge.NombreJours,
+                Commentaire = _conge.Commentaire
+            });
+            _conge = NewCongeModel.Create();
+            _showConge = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ChangerStatutAsync(int congeId, StatutConge statut)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Travail.ChangerStatutConge(congeId, statut);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class NewFicheModel
+    {
+        public string MoisInput { get; set; } = string.Empty;
+        public decimal SalaireBrut { get; set; }
+        public decimal SalaireNet { get; set; }
+        public decimal TotalCotisations { get; set; }
+        public string? Note { get; set; }
+
+        public static NewFicheModel Create()
+        {
+            var today = DateTime.Today;
+            return new NewFicheModel { MoisInput = $"{today.Year:D4}-{today.Month:D2}" };
+        }
+    }
+
+    private sealed class NewCongeModel
+    {
+        public TypeConge Type { get; set; } = TypeConge.Paye;
+        public DateTime DateDebut { get; set; }
+        public DateTime DateFin { get; set; }
+        public decimal NombreJours { get; set; }
+        public string? Commentaire { get; set; }
+
+        public static NewCongeModel Create()
+        {
+            var today = DateTime.Today;
+            return new NewCongeModel
+            {
+                DateDebut = today,
+                DateFin = today,
+                NombreJours = TravailCalendrier.CompterJoursOuvres(today, today)
+            };
+        }
+    }
+}

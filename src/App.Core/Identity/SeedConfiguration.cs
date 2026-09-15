@@ -1,5 +1,9 @@
 namespace App.Core.Identity;
 
+/// <summary>
+/// Lit e-mail/mot de passe de seed depuis la config (sections SeedAdmin/SeedTest ou variables d'environnement).
+/// Aucun mot de passe n'est codé en dur ici.
+/// </summary>
 internal static class SeedConfiguration
 {
     public static string? GetAdminEmail(IConfiguration configuration) =>

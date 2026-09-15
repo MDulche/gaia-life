@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace App.Modules.Finance.Data;
 
+/// <summary>Factory design-time pour <c>dotnet ef</c> (migrations Finance).</summary>
 public sealed class FinanceDbContextFactory : IDesignTimeDbContextFactory<FinanceDbContext>
 {
     public FinanceDbContext CreateDbContext(string[] args)

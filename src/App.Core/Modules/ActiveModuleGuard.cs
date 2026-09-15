@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace App.Core.Modules;
 
+/// <summary>
+/// Garde d'accès aux routes de module : ouvre un <see cref="AppDbContext"/> via factory
+/// (le menu et la page ne doivent pas partager le même contexte).
+/// </summary>
 public sealed class ActiveModuleGuard : IActiveModuleGuard
 {
     private readonly ModuleManager _moduleManager;

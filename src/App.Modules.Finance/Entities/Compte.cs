@@ -1,5 +1,6 @@
 namespace App.Modules.Finance.Entities;
 
+/// <summary>Compte bancaire du foyer. Le solde affiché = <see cref="SoldeInitial"/> ± transactions.</summary>
 public class Compte
 {
     public int Id { get; set; }

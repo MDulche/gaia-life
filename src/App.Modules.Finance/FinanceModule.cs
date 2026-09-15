@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace App.Modules.Finance;
 
+/// <summary>Module Finances : factory DbContext, service, widget d'accueil.</summary>
 public sealed class FinanceModule : IAppModule
 {
     public const string ModuleKey = "finance";
@@ -34,6 +35,7 @@ public sealed class FinanceModule : IAppModule
         services.AddScoped<FinanceService>();
     }
 
+    /// <summary>No-op si le module n'est pas enregistré (factory absente du DI).</summary>
     public static async Task MigrateAsync(IServiceProvider services, CancellationToken cancellationToken = default)
     {
         using var scope = services.CreateScope();

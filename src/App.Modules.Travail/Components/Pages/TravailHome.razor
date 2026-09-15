@@ -1,0 +1,164 @@
+@page "/travail"
+@* Liste des employeurs (en cours vs terminés). Accès refusé si le module est inactif. *@
+@attribute [Authorize]
+@inject TravailService Travail
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Travail</PageTitle>
+
+@if (_ready)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h1 class="h3 mb-0">Travail</h1>
+        <button type="button" class="btn btn-primary" @onclick="() => _showNew = !_showNew">
+            Ajouter un employeur
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    @if (_showNew)
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h2 class="h6 mb-3">Nouvel employeur</h2>
+                <EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
+                    <DataAnnotationsValidator />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="emp-nom">Nom</label>
+                            <InputText id="emp-nom" class="form-control" @bind-Value="_nouveau.Nom" />
+                            <ValidationMessage For="() => _nouveau.Nom" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="emp-adresse">Adresse (optionnel)</label>
+                            <InputText id="emp-adresse" class="form-control" @bind-Value="_nouveau.Adresse" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="emp-debut">Date de début</label>
+                            <InputDate id="emp-debut" class="form-control" @bind-Value="_nouveau.DateDebut" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="emp-fin">Date de fin (optionnel)</label>
+                            <InputDate id="emp-fin" class="form-control" @bind-Value="_nouveau.DateFin" />
+                            <div class="form-text">Laissez vide si l'emploi est en cours.</div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Créer</button>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    @if (_employeurs.Count == 0)
+    {
+        <p class="text-muted">Aucun employeur pour le moment. Ajoutez-en un pour commencer.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Employeur</th>
+                        <th>Période</th>
+                        <th>État</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var employeur in _employeurs)
+                    {
+                        var enCours = employeur.DateFin is null;
+                        <tr class="@(enCours ? "" : "text-muted")">
+                            <td>
+                                <a href="@($"/travail/employeurs/{employeur.Id}")">@employeur.Nom</a>
+                                @if (!string.IsNullOrEmpty(employeur.Adresse))
+                                {
+                                    <div class="small">@employeur.Adresse</div>
+                                }
+                            </td>
+                            <td>
+                                @employeur.DateDebut.ToString("d")
+                                — @(employeur.DateFin?.ToString("d") ?? "en cours")
+                            </td>
+                            <td>
+                                @if (enCours)
+                                {
+                                    <span class="badge text-bg-success">En cours</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-secondary">Terminé</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private bool _ready;
+    private bool _busy;
+    private bool _showNew;
+    private string? _error;
+    private List<Employeur> _employeurs = [];
+    private NewEmployeurModel _nouveau = NewEmployeurModel.Create();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await TravailAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync() => _employeurs = await Travail.ListerEmployeursAsync();
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Travail.AjouterEmployeurAsync(_nouveau.Nom, _nouveau.Adresse, _nouveau.DateDebut, _nouveau.DateFin);
+            _nouveau = NewEmployeurModel.Create();
+            _showNew = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class NewEmployeurModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128)]
+        public string Nom { get; set; } = string.Empty;
+
+        public string? Adresse { get; set; }
+
+        public DateTime DateDebut { get; set; }
+
+        public DateTime? DateFin { get; set; }
+
+        public static NewEmployeurModel Create() => new() { DateDebut = DateTime.Today };
+    }
+}

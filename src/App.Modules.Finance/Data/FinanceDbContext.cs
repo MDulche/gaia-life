@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace App.Modules.Finance.Data;
 
+/// <summary>
+/// Contexte métier Finances. Uniquement via <c>IDbContextFactory</c> (pas de Scoped Identity).
+/// </summary>
 public class FinanceDbContext : DbContext
 {
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options)

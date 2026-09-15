@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace App.Core.Data;
 
+/// <summary>
+/// Factory <em>design-time</em> pour <c>dotnet ef</c> (distincte de <c>IDbContextFactory&lt;AppDbContext&gt;</c> runtime).
+/// </summary>
 public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)

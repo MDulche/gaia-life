@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace App.Core.Data;
 
+/// <summary>
+/// Contexte Identity + activation des modules.
+/// Enregistré à la fois en factory (requêtes Blazor) et en Scoped (stores Identity).
+/// </summary>
 public class AppDbContext : IdentityDbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options)

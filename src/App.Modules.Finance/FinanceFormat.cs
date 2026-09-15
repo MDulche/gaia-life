@@ -3,6 +3,7 @@ using App.Modules.Finance.Entities;
 
 namespace App.Modules.Finance;
 
+/// <summary>Formatage fr-FR pour les montants et mois affichés dans l'UI Finances.</summary>
 internal static class FinanceFormat
 {
     private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");

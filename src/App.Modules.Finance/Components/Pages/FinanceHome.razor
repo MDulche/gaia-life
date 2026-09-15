@@ -1,4 +1,5 @@
 @page "/finance"
+@* Liste des comptes. Bloqué si le module est inactif (ActiveModuleGuard). *@
 @attribute [Authorize]
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard

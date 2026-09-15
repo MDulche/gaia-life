@@ -6,6 +6,10 @@ using Microsoft.Extensions.Options;
 
 namespace App.Core.Identity;
 
+/// <summary>
+/// Revalide périodiquement le security stamp Identity pendant un circuit Blazor Server
+/// (changement de rôle / mot de passe = déconnexion du circuit).
+/// </summary>
 internal sealed class IdentityRevalidatingAuthenticationStateProvider(
     ILoggerFactory loggerFactory,
     IServiceScopeFactory scopeFactory,

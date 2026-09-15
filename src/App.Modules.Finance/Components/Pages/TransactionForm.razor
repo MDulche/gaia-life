@@ -1,5 +1,6 @@
 @page "/finance/comptes/{CompteId:int}/transactions/nouvelle"
 @page "/finance/comptes/{CompteId:int}/transactions/{TransactionId:int}"
+@* Création / édition d'une transaction. Le montant est toujours positif ; le type donne le signe. *@
 @attribute [Authorize]
 @using System.ComponentModel.DataAnnotations
 @inject FinanceService Finance

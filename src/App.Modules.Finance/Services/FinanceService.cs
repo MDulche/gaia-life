@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace App.Modules.Finance.Services;
 
+/// <summary>
+/// Accès métier Finances. Chaque méthode ouvre son propre contexte via factory
+/// (évite les accès concurrents Blazor menu + page).
+/// </summary>
 public sealed class FinanceService
 {
     private readonly IDbContextFactory<FinanceDbContext> _dbFactory;
@@ -46,6 +50,7 @@ public sealed class FinanceService
         return compte;
     }
 
+    /// <summary>Solde courant = solde initial + entrées − sorties.</summary>
     public async Task<decimal> SoldeActuel(int compteId, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -103,6 +108,7 @@ public sealed class FinanceService
         return await db.Transactions.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
+    /// <summary>Crée la catégorie à la volée si le nom n'existe pas encore.</summary>
     public async Task AjouterTransaction(Transaction transaction, CancellationToken cancellationToken = default)
     {
         ValiderTransaction(transaction);
@@ -164,6 +170,7 @@ public sealed class FinanceService
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>Totaux par catégorie de sorties sur une période (graphique camembert).</summary>
     public async Task<IReadOnlyList<CategorieMontant>> RepartitionParCategorie(DateTime debut, DateTime fin, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -304,6 +311,8 @@ public sealed class FinanceService
     }
 }
 
+/// <summary>Total des sorties d'une catégorie (synthèse).</summary>
 public sealed record CategorieMontant(string Categorie, decimal Total, string? Couleur);
 
+/// <summary>Entrées / sorties d'un mois calendaire.</summary>
 public sealed record MoisTotaux(DateTime Mois, decimal Entrees, decimal Sorties);

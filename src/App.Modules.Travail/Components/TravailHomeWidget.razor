@@ -1,0 +1,52 @@
+@* Widget accueil : employeur actif, solde de l'année, dernière fiche de paie. *@
+@inject TravailService Travail
+
+<div>
+    <h3 class="h6 text-muted mb-2">
+        <span class="module-icon bi-briefcase me-1" aria-hidden="true"></span>
+        Travail
+    </h3>
+    @if (_loading)
+    {
+        <p class="text-muted mb-0">Chargement…</p>
+    }
+    else if (_employeur is null)
+    {
+        <p class="text-muted mb-0">Aucun employeur enregistré.</p>
+    }
+    else
+    {
+        <p class="mb-1"><strong>@_employeur.Nom</strong></p>
+        <p class="fs-4 mb-2">@TravailFormat.Jours(_solde?.JoursRestants ?? 0) restants</p>
+        @if (_fiche is null)
+        {
+            <p class="text-muted small mb-0">Aucune fiche de paie.</p>
+        }
+        else
+        {
+            <p class="small mb-0">
+                Dernière paie · @TravailFormat.Mois(_fiche.Mois)
+                · @TravailFormat.Euro(_fiche.SalaireNet)
+            </p>
+        }
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private Employeur? _employeur;
+    private SoldeCongesInfo? _solde;
+    private FichePaie? _fiche;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _employeur = await Travail.GetEmployeurActifAsync();
+        if (_employeur is not null)
+        {
+            _solde = await Travail.SoldeCongesActuel(_employeur.Id, DateTime.Today.Year);
+            _fiche = await Travail.DerniereFichePaieAsync(_employeur.Id);
+        }
+
+        _loading = false;
+    }
+}
