@@ -243,6 +243,194 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task ModifierEmployeurAsync(
+        int id,
+        string nom,
+        string? adresse,
+        DateTime dateDebut,
+        DateTime? dateFin,
+        CancellationToken cancellationToken = default)
+    {
+        var trimmed = nom.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new InvalidOperationException("Le nom de l'employeur est obligatoire.");
+        }
+
+        if (dateFin is not null && dateFin.Value.Date < dateDebut.Date)
+        {
+            throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var employeur = await db.Employeurs.FirstOrDefaultAsync(e => e.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException("Employeur introuvable.");
+
+        employeur.Nom = trimmed;
+        employeur.Adresse = string.IsNullOrWhiteSpace(adresse) ? null : adresse.Trim();
+        employeur.DateDebut = dateDebut.Date;
+        employeur.DateFin = dateFin?.Date;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SupprimerEmployeurAsync(int id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var employeur = await db.Employeurs.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        if (employeur is null)
+        {
+            return;
+        }
+
+        db.Employeurs.Remove(employeur);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<TravailEmployeurSolde>> ListerSoldesEmployeursActifsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var annee = DateTime.Today.Year;
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var actifs = await db.Employeurs.AsNoTracking()
+            .Where(e => e.DateFin == null)
+            .OrderByDescending(e => e.DateDebut)
+            .ToListAsync(cancellationToken);
+
+        var rows = new List<TravailEmployeurSolde>(actifs.Count);
+        var premier = true;
+        foreach (var employeur in actifs)
+        {
+            var joursAcquis = await db.SoldeConges.AsNoTracking()
+                .Where(s => s.EmployeurId == employeur.Id && s.Annee == annee)
+                .Select(s => (decimal?)s.JoursAcquis)
+                .FirstOrDefaultAsync(cancellationToken) ?? 0;
+            var joursPris = await JoursPrisValidesAsync(db, employeur.Id, annee, cancellationToken);
+            rows.Add(new TravailEmployeurSolde(
+                employeur.Id,
+                employeur.Nom,
+                joursAcquis - joursPris,
+                premier));
+            premier = false;
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Calcul provisoire : rythme de prise de l'année (jours validés / mois écoulés)
+    /// projeté sur les mois restants jusqu'au 31 décembre, soustrait du solde actuel.
+    /// </summary>
+    public async Task<ProjectionSoldeFinAnnee> PrevoirSoldeFinAnneeAsync(
+        int employeurId,
+        CancellationToken cancellationToken = default)
+    {
+        var today = DateTime.Today;
+        var moisEcoules = today.Month;
+        var moisRestants = 12 - moisEcoules;
+        var solde = await SoldeCongesActuel(employeurId, today.Year, cancellationToken);
+        var extra = moisEcoules == 0 || moisRestants == 0
+            ? 0
+            : solde.JoursPris / moisEcoules * moisRestants;
+        var prevision = solde.JoursRestants - extra;
+        return new ProjectionSoldeFinAnnee(
+            decimal.Round(solde.JoursRestants, 2),
+            decimal.Round(prevision, 2),
+            moisEcoules,
+            moisRestants,
+            solde.JoursPris);
+    }
+
+    public async Task<IReadOnlyList<TravailTypePart>> RepartitionCongesPrisParType(
+        int employeurId,
+        int annee,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureEmployeurExistsAsync(db, employeurId, cancellationToken);
+        await EnsureCouleursAsync(db, cancellationToken);
+
+        var rows = await db.Conges.AsNoTracking()
+            .Where(c => c.EmployeurId == employeurId
+                && c.Statut == StatutConge.Valide
+                && c.DateDebut.Year == annee)
+            .GroupBy(c => c.Type)
+            .Select(g => new { Type = g.Key, Jours = g.Sum(c => c.NombreJours) })
+            .ToListAsync(cancellationToken);
+
+        var couleurs = await db.CouleursTypes.AsNoTracking()
+            .ToDictionaryAsync(c => c.Type, c => c.Couleur, cancellationToken);
+
+        return rows
+            .Where(r => r.Jours > 0)
+            .Select(r => new TravailTypePart(
+                TravailFormat.Type(r.Type),
+                r.Jours,
+                couleurs.GetValueOrDefault(r.Type)))
+            .OrderByDescending(r => r.Jours)
+            .ToList();
+    }
+
+    public async Task<List<FichePaie>> ListerFiches12DerniersMois(
+        int employeurId,
+        CancellationToken cancellationToken = default)
+    {
+        var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-11);
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.FichePaies.AsNoTracking()
+            .Where(f => f.EmployeurId == employeurId && f.Mois >= debut)
+            .OrderByDescending(f => f.Mois)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<CouleurTypeConge>> ListerCouleursTypesAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCouleursAsync(db, cancellationToken);
+        return await db.CouleursTypes.AsNoTracking()
+            .OrderBy(c => c.Type)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task EnregistrerCouleurTypeAsync(TypeConge type, string couleur, CancellationToken cancellationToken = default)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(couleur) ? "#0d6efd" : couleur.Trim();
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCouleursAsync(db, cancellationToken);
+        var row = await db.CouleursTypes.FirstOrDefaultAsync(c => c.Type == type, cancellationToken)
+            ?? throw new InvalidOperationException("Type de congé introuvable.");
+        row.Couleur = trimmed;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static readonly (TypeConge Type, string Couleur)[] CouleursParDefaut =
+    [
+        (TypeConge.Paye, "#0d6efd"),
+        (TypeConge.SansSolde, "#6c757d"),
+        (TypeConge.Maladie, "#dc3545"),
+        (TypeConge.RTT, "#20c997")
+    ];
+
+    private static async Task EnsureCouleursAsync(TravailDbContext db, CancellationToken cancellationToken)
+    {
+        var existants = await db.CouleursTypes.Select(c => c.Type).ToListAsync(cancellationToken);
+        var added = false;
+        foreach (var (type, couleur) in CouleursParDefaut)
+        {
+            if (existants.Contains(type))
+            {
+                continue;
+            }
+
+            db.CouleursTypes.Add(new CouleurTypeConge { Type = type, Couleur = couleur });
+            added = true;
+        }
+
+        if (added)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     /// <summary>Vérifie le rôle Admin via le circuit Blazor (pas IHttpContextAccessor, souvent null en Interactive Server).</summary>
     private async Task EnsureAdminAsync()
     {
@@ -356,3 +544,17 @@ public sealed class TravailService
 
 /// <summary>Solde d'une année : acquis persisté, pris et reste calculés.</summary>
 public sealed record SoldeCongesInfo(int Annee, decimal JoursAcquis, decimal JoursPris, decimal JoursRestants);
+
+/// <summary>Solde de l'année en cours pour un employeur encore en poste.</summary>
+public sealed record TravailEmployeurSolde(int Id, string Nom, decimal JoursRestants, bool EstPrincipal);
+
+/// <summary>Projection provisoire du solde au 31 décembre.</summary>
+public sealed record ProjectionSoldeFinAnnee(
+    decimal SoldeActuel,
+    decimal Prevision,
+    int MoisEcoules,
+    int MoisRestants,
+    decimal JoursPris);
+
+/// <summary>Part du camembert (congés validés de l'année, par type).</summary>
+public sealed record TravailTypePart(string Type, decimal Jours, string? Couleur);

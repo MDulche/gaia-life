@@ -1,0 +1,126 @@
+@inject TravailService Travail
+
+<h3 id="soldes-conges" class="h6 mt-4">Soldes de congés (jours acquis)</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="alert alert-success" role="status">@_toast</div>
+}
+
+<p class="text-muted small">Les jours pris restent calculés à partir des congés validés dont la date de début tombe dans l'année choisie.</p>
+
+<div class="row g-2 align-items-end mb-3">
+    <div class="col-md-3">
+        <label class="form-label" for="solde-annee">Année</label>
+        <InputNumber id="solde-annee" class="form-control form-control-sm" @bind-Value="_annee" @bind-Value:after="ReloadAsync" />
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Employeur</th>
+                <th>Jours acquis</th>
+                <th>Jours pris</th>
+                <th>Reste</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_lignes.Count == 0)
+            {
+                <tr>
+                    <td colspan="5" class="text-muted text-center">Aucun employeur pour le moment.</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var ligne in _lignes)
+                {
+                    <tr>
+                        <td>@ligne.Nom</td>
+                        <td>
+                            <InputNumber class="form-control form-control-sm" @bind-Value="ligne.JoursAcquis" />
+                        </td>
+                        <td>@TravailFormat.Jours(ligne.JoursPris)</td>
+                        <td>@TravailFormat.Jours(ligne.JoursRestants)</td>
+                        <td>
+                            <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="() => SaveAsync(ligne)">Enregistrer</button>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private string? _toast;
+    private int _annee = DateTime.Today.Year;
+    private List<SoldeLigne> _lignes = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        if (_annee is < 1990 or > 2100)
+        {
+            return;
+        }
+
+        var employeurs = await Travail.ListerEmployeursAsync();
+        var lignes = new List<SoldeLigne>(employeurs.Count);
+        foreach (var employeur in employeurs)
+        {
+            var solde = await Travail.SoldeCongesActuel(employeur.Id, _annee);
+            lignes.Add(new SoldeLigne(employeur.Id, employeur.Nom, solde.JoursAcquis, solde.JoursPris, solde.JoursRestants));
+        }
+
+        _lignes = lignes;
+    }
+
+    private async Task SaveAsync(SoldeLigne ligne)
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        try
+        {
+            await Travail.EnregistrerJoursAcquisAsync(ligne.Id, _annee, ligne.JoursAcquis);
+            await ReloadAsync();
+            _toast = $"Solde enregistré pour {ligne.Nom}.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class SoldeLigne
+    {
+        public SoldeLigne(int id, string nom, decimal joursAcquis, decimal joursPris, decimal joursRestants)
+        {
+            Id = id;
+            Nom = nom;
+            JoursAcquis = joursAcquis;
+            JoursPris = joursPris;
+            JoursRestants = joursRestants;
+        }
+
+        public int Id { get; }
+        public string Nom { get; }
+        public decimal JoursAcquis { get; set; }
+        public decimal JoursPris { get; }
+        public decimal JoursRestants { get; }
+    }
+}

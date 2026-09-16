@@ -1,0 +1,64 @@
+@inject TravailService Travail
+
+<h3 class="h6 mt-4">Couleurs des types de congé</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Couleur</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var couleur in _couleurs)
+            {
+                <tr>
+                    <td>@TravailFormat.Type(couleur.Type)</td>
+                    <td>
+                        <span class="finance-legend-swatch" style="background:@couleur.Couleur"></span>
+                        <input type="color" class="form-control form-control-color form-control-sm d-inline-block"
+                               value="@couleur.Couleur"
+                               disabled="@_busy"
+                               @onchange="e => SaveAsync(couleur.Type, e.Value?.ToString())" />
+                    </td>
+                    <td><code>@couleur.Couleur</code></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private List<CouleurTypeConge> _couleurs = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _couleurs = await Travail.ListerCouleursTypesAsync();
+
+    private async Task SaveAsync(TypeConge type, string? couleur)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Travail.EnregistrerCouleurTypeAsync(type, couleur ?? "#0d6efd");
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

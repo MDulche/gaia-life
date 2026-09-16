@@ -276,6 +276,24 @@ h1:focus {
     min-height: 0;
 }
 
+.travail-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.travail-dashboard-col {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 0;
+}
+
+.travail-dashboard .widget-card {
+    min-height: 0;
+}
+
 @media (min-width: 768px) {
     .finance-dashboard {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -283,6 +301,10 @@ h1:focus {
 
     .course-dashboard {
         grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    }
+
+    .travail-dashboard {
+        grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
     }
 }
 

@@ -22,6 +22,8 @@ public class TravailDbContext : DbContext
 
     public DbSet<SoldeConges> SoldeConges => Set<SoldeConges>();
 
+    public DbSet<CouleurTypeConge> CouleursTypes => Set<CouleurTypeConge>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Employeur>(entity =>
@@ -73,6 +75,16 @@ public class TravailDbContext : DbContext
             entity.ToTable("SoldeConges");
             entity.Property(e => e.JoursAcquis).HasPrecision(5, 2);
             entity.HasIndex(e => new { e.EmployeurId, e.Annee }).IsUnique();
+        });
+
+        modelBuilder.Entity<CouleurTypeConge>(entity =>
+        {
+            entity.ToTable("CouleurTypeConges");
+            entity.Property(e => e.Couleur).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.Type)
+                .HasConversion<string>()
+                .HasMaxLength(16);
+            entity.HasIndex(e => e.Type).IsUnique();
         });
     }
 }

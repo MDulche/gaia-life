@@ -1,6 +1,7 @@
 @page "/admin"
 @page "/admin/{Tab}"
-@* Administration : onglets Modules / Finance / Courses / Utilisateurs / Système / Supervision. *@
+@page "/admin/{Tab}/{Section}"
+@* Administration : onglets Modules / Finance / Travail / Courses / Utilisateurs / Système / Supervision. *@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @implements IDisposable
 @using System.Globalization
@@ -24,6 +25,10 @@
     @if (_activeKeys.Contains(FinanceModule.ModuleKey))
     {
         <NavLink class="nav-link" href="/admin/finance" Match="NavLinkMatch.All">Finance</NavLink>
+    }
+    @if (_activeKeys.Contains(TravailModule.ModuleKey))
+    {
+        <NavLink class="nav-link" href="/admin/travail" Match="NavLinkMatch.Prefix">Travail</NavLink>
     }
     @if (_activeKeys.Contains(CourseModule.ModuleKey))
     {
@@ -168,6 +173,10 @@ else if (_tab == "finance")
 {
     <AdminFinanceSection />
 }
+else if (_tab == "travail")
+{
+    <AdminTravailSection />
+}
 else if (_tab == "course")
 {
     <AdminCourseSection />
@@ -286,6 +295,9 @@ else if (_tab == "supervision")
     [Parameter]
     public string? Tab { get; set; }
 
+    [Parameter]
+    public string? Section { get; set; }
+
     [Inject] private ModuleManager ModuleManager { get; set; } = default!;
     [Inject] private IDbContextFactory<AppDbContext> DbFactory { get; set; } = default!;
     [Inject] private UserManager<IdentityUser> UserManager { get; set; } = default!;
@@ -299,7 +311,7 @@ else if (_tab == "supervision")
 
     private static readonly HashSet<string> KnownTabs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "modules", "finance", "course", "utilisateurs", "systeme", "supervision"
+        "modules", "finance", "travail", "course", "utilisateurs", "systeme", "supervision"
     };
 
     private string _tab = "modules";
@@ -320,6 +332,7 @@ else if (_tab == "supervision")
     {
         "utilisateurs" => "Utilisateurs",
         "finance" => "Finance",
+        "travail" => "Travail",
         "course" => "Courses",
         "systeme" => "Système",
         "supervision" => "Supervision",
@@ -350,9 +363,22 @@ else if (_tab == "supervision")
             return;
         }
 
+        if (requested == "travail" && !_activeKeys.Contains(TravailModule.ModuleKey))
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
         if (requested == "course" && !_activeKeys.Contains(CourseModule.ModuleKey))
         {
             Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Section)
+            && !(requested == "travail" && Section.Equals("soldes-conges", StringComparison.OrdinalIgnoreCase)))
+        {
+            Navigation.NavigateTo($"/admin/{requested}", replace: true);
             return;
         }
 

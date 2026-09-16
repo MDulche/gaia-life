@@ -168,7 +168,7 @@ Migrations appliquées par l'application au démarrage :
 | --- | --- | --- |
 | `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate` |
 | `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance`, `20260916071850_AjoutChargesEtPrincipal` |
-| `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail` |
+| `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail`, `20260916082127_CouleurTypeConge` |
 | `CourseDbContext` | `src/App.Modules.Course` | `20260916075347_InitialCourse` |
 
 Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suffit en développement (`MigrateAsync`). En production, le même mécanisme s'exécute au démarrage du conteneur ; vous pouvez aussi lancer les commandes `dotnet ef database update` ci-dessus depuis une machine autorisée.
@@ -186,7 +186,9 @@ Un contexte Identity séparé n'a pas été créé : les tables utilisateurs/rô
 
 Les factories réutilisent `GaiaMariaDb` (Pomelo `EnableRetryOnFailure`, MariaDB 11.6).
 
-Dans Travail, `SoldeConges.JoursPris` n'est **pas** persisté : il est calculé à partir des congés au statut `Valide` de l'année (`DateDebut`). Seul `JoursAcquis` est stocké (page `/travail/employeurs/{id}/solde-conges`).
+Dans Travail, `SoldeConges.JoursPris` n'est **pas** persisté : il est calculé à partir des congés au statut `Valide` de l'année (`DateDebut`). Seul `JoursAcquis` est stocké, saisi depuis `/admin/travail/soldes-conges`.
+
+L'ancienne page `/travail/employeurs/{id}/solde-conges` redirige vers `/admin/travail/soldes-conges` pour n'avoir qu'un seul chemin de saisie (réservé Admin). Le tableau de bord quotidien reste `/travail/employeurs/{id}`.
 
 ## Données : foyer partagé, pas de cloisonnement par utilisateur
 
@@ -194,7 +196,7 @@ Gaia-Life est une application **mono-foyer** : Finances, Travail et Courses sont
 
 Les rôles servent à l'administration de l'app, pas à isoler les données :
 
-- **Admin** : pages `/admin/modules`, `/admin/finance` (si le module Finance est actif), `/admin/course` (si le module Courses est actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
+- **Admin** : pages `/admin/modules`, `/admin/finance` (si le module Finance est actif), `/admin/travail` (si le module Travail est actif, y compris `/admin/travail/soldes-conges`), `/admin/course` (si le module Courses est actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
 - **Membre** / **Lecture** : accès aux modules actifs, sans les boutons Valider / Refuser.
 
 Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une notion de foyer (ou `UserId`) sur les agrégats, ce qui n'existe pas aujourd'hui.
@@ -313,6 +315,8 @@ Raccourcis d'urgence (favoris, téléphone) :
 | `/admin` | Redirige vers `/admin/modules` |
 | `/admin/modules` | Activer / désactiver Finance, Travail et Courses |
 | `/admin/finance` | Comptes, charges, catégories, période de prévision (module Finance actif) |
+| `/admin/travail` | Employeurs, soldes de congés, couleurs des types (module Travail actif) |
+| `/admin/travail/soldes-conges` | Jours acquis par employeur et par année (redirige depuis `/travail/employeurs/{id}/solde-conges`) |
 | `/admin/course` | Magasins, catégories Courses, purge d'historique (module Courses actif) |
 | `/admin/utilisateurs` | Rôles Identity |
 | `/admin/systeme` | Environnement et ping MariaDB |
@@ -416,7 +420,7 @@ Le déploiement prod reste **manuel** (pas de webhook).
 | Sidebar desktop | Section Modules + Administration en bas, bouton « replier » | Viewport ≥ 641 px ; le menu réduit n'affiche plus que les icônes. |
 | Hamburger | Menu fermé par défaut, ouverture au pictogramme | Viewport 375 px ; Accueil, Finance, Travail, Courses, Administration accessibles. |
 | Menu si MariaDB coupée | Accueil / Administration restent visibles | `docker compose ... stop mariadb` ; le menu ne doit pas afficher d'erreur 500. |
-| Onglets `/admin` | 6 URLs distinctes | `/admin/modules`, `/admin/finance` (si Finance actif), `/admin/course` (si Courses actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
+| Onglets `/admin` | 7 URLs distinctes | `/admin/modules`, `/admin/finance` (si Finance actif), `/admin/travail` (si Travail actif), `/admin/course` (si Courses actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
 | Badge alerte | Point sur Administration + onglet Supervision | Couper MariaDB : le pictogramme × apparaît ; au retour de la base, il disparaît (≤ 15 s ou Rafraîchir). |
 | Widgets | `WidgetCard` commun, grille 2 / 1 colonnes | Accueil : cartes Finance, Travail et Courses mêmes titres / métriques ; 375 px = une colonne. |
 | État vide | Carte unique dans la grille, bouton vers `/admin/modules` | Désactiver les modules, ou couper MariaDB : le menu Accueil / Administration reste affiché. |

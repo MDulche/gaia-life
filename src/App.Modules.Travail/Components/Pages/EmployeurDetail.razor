@@ -1,5 +1,5 @@
 @page "/travail/employeurs/{Id:int}"
-@* Fiches de paie et congés. Valider / Refuser visibles uniquement pour Admin. *@
+@* Tableau de bord employeur : soldes, projection, congés en attente, camembert, fiches. *@
 @attribute [Authorize]
 @inject TravailService Travail
 @inject IActiveModuleGuard ModuleGuard
@@ -16,13 +16,8 @@
             <p class="text-muted mb-0">
                 @_employeur.DateDebut.ToString("d")
                 — @(_employeur.DateFin?.ToString("d") ?? "en cours")
-                @if (_solde is not null)
-                {
-                    <span> · Solde @_solde.Annee : <strong>@TravailFormat.Jours(_solde.JoursRestants)</strong></span>
-                }
             </p>
         </div>
-        <a class="btn btn-outline-secondary" href="@($"/travail/employeurs/{Id}/solde-conges")">Solde de congés</a>
     </div>
 
     @if (!string.IsNullOrEmpty(_error))
@@ -30,46 +25,118 @@
         <div class="alert alert-danger" role="alert">@_error</div>
     }
 
-    <ul class="nav nav-tabs mb-3" role="tablist">
-        <li class="nav-item">
-            <button type="button" class="nav-link @(_tab == "paie" ? "active" : null)" @onclick='() => _tab = "paie"'>Fiches de paie</button>
-        </li>
-        <li class="nav-item">
-            <button type="button" class="nav-link @(_tab == "conges" ? "active" : null)" @onclick='() => _tab = "conges"'>Congés</button>
-        </li>
-    </ul>
+    <div class="travail-dashboard">
+        <div class="travail-dashboard-col">
+            <WidgetCard Title="Solde de congés" Icon="bi-briefcase">
+                @if (_soldesActifs.Count == 0)
+                {
+                    <p class="text-muted mb-0">Aucun employeur en cours.</p>
+                }
+                else
+                {
+                    <ul class="list-unstyled mb-0">
+                        @for (var i = 0; i < _soldesActifs.Count; i++)
+                        {
+                            var row = _soldesActifs[i];
+                            <li class="d-flex justify-content-between align-items-baseline gap-2 @(i == 0 ? "mb-2" : "mb-1")">
+                                <a class="@(row.EstPrincipal ? "finance-account-primary" : "finance-account-secondary") text-decoration-none"
+                                   href="@($"/travail/employeurs/{row.Id}")">@row.Nom</a>
+                                <span class="@(row.EstPrincipal ? "finance-account-primary" : "finance-account-secondary")">
+                                    @TravailFormat.Jours(row.JoursRestants)
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </WidgetCard>
 
-    @if (_tab == "paie")
-    {
-        <div class="d-flex justify-content-end mb-3">
-            <button type="button" class="btn btn-primary" @onclick="() => _showPaie = !_showPaie">Ajouter une fiche de paie</button>
-        </div>
+            @* Calcul provisoire : voir TravailService.PrevoirSoldeFinAnneeAsync (rythme de prise × mois restants). *@
+            <WidgetCard Title="Projection de fin d'année">
+                @if (_projection is null)
+                {
+                    <p class="text-muted mb-0">Projection indisponible.</p>
+                }
+                else
+                {
+                    <p class="widget-metric mb-2">@TravailFormat.Jours(_projection.Prevision)</p>
+                    <p class="small text-muted mb-0">
+                        Solde actuel @TravailFormat.Jours(_projection.SoldeActuel),
+                        rythme sur @_projection.MoisEcoules mois projeté sur @_projection.MoisRestants mois restants.
+                    </p>
+                }
+            </WidgetCard>
 
-        @if (_showPaie)
-        {
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <h2 class="h6 mb-3">Nouvelle fiche de paie</h2>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-primary flex-fill" @onclick="ToggleConge">Demander un congé</button>
+                <button type="button" class="btn btn-outline-primary flex-fill" @onclick="TogglePaie">Ajouter une fiche de paie</button>
+            </div>
+
+            @if (_showConge)
+            {
+                <WidgetCard Title="Nouvelle demande de congé">
+                    <EditForm Model="_conge" OnValidSubmit="CreateCongeAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="conge-type">Type</label>
+                                <InputSelect id="conge-type" class="form-select" @bind-Value="_conge.Type">
+                                    @foreach (var type in Enum.GetValues<TypeConge>())
+                                    {
+                                        <option value="@type">@TravailFormat.Type(type)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="conge-jours">Nombre de jours</label>
+                                <InputNumber id="conge-jours" class="form-control" @bind-Value="_conge.NombreJours" />
+                                <div class="form-text">Calculé en jours ouvrés (lun–ven). Ajustable pour une demi-journée.</div>
+                                <ValidationMessage For="() => _conge.NombreJours" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="conge-debut">Date de début</label>
+                                <InputDate id="conge-debut" class="form-control" @bind-Value="_conge.DateDebut" @bind-Value:after="RecalcJours" />
+                                <ValidationMessage For="() => _conge.DateDebut" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="conge-fin">Date de fin</label>
+                                <InputDate id="conge-fin" class="form-control" @bind-Value="_conge.DateFin" @bind-Value:after="RecalcJours" />
+                                <ValidationMessage For="() => _conge.DateFin" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="conge-com">Commentaire (optionnel)</label>
+                                <InputText id="conge-com" class="form-control" @bind-Value="_conge.Commentaire" />
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary" disabled="@_busy">Envoyer la demande</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                </WidgetCard>
+            }
+
+            @if (_showPaie)
+            {
+                <WidgetCard Title="Nouvelle fiche de paie">
                     <EditForm Model="_fiche" OnValidSubmit="CreateFicheAsync">
                         <DataAnnotationsValidator />
                         <div class="row g-3">
-                            <div class="col-md-3">
+                            <div class="col-md-6">
                                 <label class="form-label" for="fiche-mois">Mois</label>
                                 <input id="fiche-mois" type="month" class="form-control" value="@_fiche.MoisInput"
                                        @onchange="e => _fiche.MoisInput = e.Value?.ToString() ?? _fiche.MoisInput" />
                                 <ValidationMessage For="() => _fiche.MoisInput" />
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-6">
                                 <label class="form-label" for="fiche-brut">Salaire brut (€)</label>
                                 <InputNumber id="fiche-brut" class="form-control" @bind-Value="_fiche.SalaireBrut" />
                                 <ValidationMessage For="() => _fiche.SalaireBrut" />
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-6">
                                 <label class="form-label" for="fiche-net">Salaire net (€)</label>
                                 <InputNumber id="fiche-net" class="form-control" @bind-Value="_fiche.SalaireNet" />
                                 <ValidationMessage For="() => _fiche.SalaireNet" />
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-6">
                                 <label class="form-label" for="fiche-cotis">Cotisations (€)</label>
                                 <InputNumber id="fiche-cotis" class="form-control" @bind-Value="_fiche.TotalCotisations" />
                                 <ValidationMessage For="() => _fiche.TotalCotisations" />
@@ -83,162 +150,97 @@
                             </div>
                         </div>
                     </EditForm>
-                </div>
-            </div>
-        }
+                </WidgetCard>
+            }
 
-        <div class="table-responsive">
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Mois</th>
-                        <th class="text-end">Salaire brut</th>
-                        <th class="text-end">Salaire net</th>
-                        <th class="text-end">Cotisations</th>
-                        <th>Note</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (_fiches.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="5" class="text-muted text-center">Aucune fiche de paie.</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var fiche in _fiches)
-                        {
+            <WidgetCard Title="Congés en attente">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
                             <tr>
-                                <td>@TravailFormat.Mois(fiche.Mois)</td>
-                                <td class="text-end">@TravailFormat.Euro(fiche.SalaireBrut)</td>
-                                <td class="text-end">@TravailFormat.Euro(fiche.SalaireNet)</td>
-                                <td class="text-end">@TravailFormat.Euro(fiche.TotalCotisations)</td>
-                                <td>@(fiche.Note ?? "—")</td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-    else
-    {
-        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
-            <div>
-                <label class="form-label" for="filtre-statut">Statut</label>
-                <InputSelect id="filtre-statut" class="form-select" @bind-Value="_filtreStatut" @bind-Value:after="ReloadCongesAsync">
-                    <option value="">Tous</option>
-                    @foreach (var statut in Enum.GetValues<StatutConge>())
-                    {
-                        <option value="@statut">@TravailFormat.Statut(statut)</option>
-                    }
-                </InputSelect>
-            </div>
-            <button type="button" class="btn btn-primary" @onclick="() => _showConge = !_showConge">Demander un congé</button>
-        </div>
-
-        @if (_showConge)
-        {
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <h2 class="h6 mb-3">Nouvelle demande de congé</h2>
-                    <EditForm Model="_conge" OnValidSubmit="CreateCongeAsync">
-                        <DataAnnotationsValidator />
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="form-label" for="conge-type">Type</label>
-                                <InputSelect id="conge-type" class="form-select" @bind-Value="_conge.Type">
-                                    @foreach (var type in Enum.GetValues<TypeConge>())
-                                    {
-                                        <option value="@type">@TravailFormat.Type(type)</option>
-                                    }
-                                </InputSelect>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label" for="conge-debut">Date de début</label>
-                                <InputDate id="conge-debut" class="form-control" @bind-Value="_conge.DateDebut" @bind-Value:after="RecalcJours" />
-                                <ValidationMessage For="() => _conge.DateDebut" />
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label" for="conge-fin">Date de fin</label>
-                                <InputDate id="conge-fin" class="form-control" @bind-Value="_conge.DateFin" @bind-Value:after="RecalcJours" />
-                                <ValidationMessage For="() => _conge.DateFin" />
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label" for="conge-jours">Nombre de jours</label>
-                                <InputNumber id="conge-jours" class="form-control" @bind-Value="_conge.NombreJours" />
-                                <div class="form-text">Calculé en jours ouvrés (lun–ven). Ajustable pour une demi-journée.</div>
-                                <ValidationMessage For="() => _conge.NombreJours" />
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label" for="conge-com">Commentaire (optionnel)</label>
-                                <InputText id="conge-com" class="form-control" @bind-Value="_conge.Commentaire" />
-                            </div>
-                            <div class="col-12">
-                                <button type="submit" class="btn btn-primary" disabled="@_busy">Envoyer la demande</button>
-                            </div>
-                        </div>
-                    </EditForm>
-                </div>
-            </div>
-        }
-
-        <div class="table-responsive">
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Dates</th>
-                        <th class="text-end">Jours</th>
-                        <th>Statut</th>
-                        <th>Commentaire</th>
-                        <AuthorizeView Roles="@TravailService.RoleAdmin">
-                            <Authorized>
-                                <th></th>
-                            </Authorized>
-                        </AuthorizeView>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (_conges.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="6" class="text-muted text-center">Aucune demande de congé.</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var conge in _conges)
-                        {
-                            <tr>
-                                <td>@TravailFormat.Type(conge.Type)</td>
-                                <td>@conge.DateDebut.ToString("d") — @conge.DateFin.ToString("d")</td>
-                                <td class="text-end">@TravailFormat.Jours(conge.NombreJours)</td>
-                                <td>
-                                    <span class="badge @TravailFormat.BadgeCss(conge.Statut)">@TravailFormat.Statut(conge.Statut)</span>
-                                </td>
-                                <td>@(conge.Commentaire ?? "—")</td>
+                                <th>Type</th>
+                                <th>Dates</th>
+                                <th class="text-end">Nombre de jours</th>
                                 <AuthorizeView Roles="@TravailService.RoleAdmin">
                                     <Authorized>
-                                        <td class="text-end text-nowrap">
-                                            @if (conge.Statut == StatutConge.EnAttente)
-                                            {
-                                                <button type="button" class="btn btn-sm btn-success me-1" disabled="@_busy"
-                                                        @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Valide)">Valider</button>
-                                                <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
-                                                        @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Refuse)">Refuser</button>
-                                            }
-                                        </td>
+                                        <th class="text-end">Actions</th>
                                     </Authorized>
                                 </AuthorizeView>
                             </tr>
-                        }
-                    }
-                </tbody>
-            </table>
+                        </thead>
+                        <tbody>
+                            @if (_enAttente.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-muted text-center">Aucune demande en attente</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var conge in _enAttente)
+                                {
+                                    <tr>
+                                        <td>@TravailFormat.Type(conge.Type)</td>
+                                        <td>@conge.DateDebut.ToString("d") — @conge.DateFin.ToString("d")</td>
+                                        <td class="text-end">@TravailFormat.Jours(conge.NombreJours)</td>
+                                        <AuthorizeView Roles="@TravailService.RoleAdmin">
+                                            <Authorized>
+                                                <td class="text-end text-nowrap">
+                                                    <button type="button" class="btn btn-sm btn-success me-1" disabled="@_busy"
+                                                            @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Valide)">Valider</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
+                                                            @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Refuse)">Refuser</button>
+                                                </td>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </WidgetCard>
         </div>
-    }
+
+        <div class="travail-dashboard-col">
+            <WidgetCard Title="Congés pris cette année">
+                <TravailPieChart Slices="_repartition" EmptyText="Aucun congé validé cette année." />
+            </WidgetCard>
+
+            <WidgetCard Title="Historique des fiches de paie">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mois</th>
+                                <th class="text-end">Salaire net</th>
+                                <th class="text-end">Salaire brut</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_fiches.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-muted text-center">Aucune fiche de paie enregistrée</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var fiche in _fiches)
+                                {
+                                    <tr>
+                                        <td>@TravailFormat.Mois(fiche.Mois)</td>
+                                        <td class="text-end">@TravailFormat.Euro(fiche.SalaireNet)</td>
+                                        <td class="text-end">@TravailFormat.Euro(fiche.SalaireBrut)</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </WidgetCard>
+        </div>
+    </div>
 }
 else if (_ready)
 {
@@ -253,13 +255,13 @@ else if (_ready)
     private bool _busy;
     private bool _showPaie;
     private bool _showConge;
-    private string _tab = "paie";
     private string? _error;
-    private string _filtreStatut = string.Empty;
     private Employeur? _employeur;
-    private SoldeCongesInfo? _solde;
+    private List<TravailEmployeurSolde> _soldesActifs = [];
+    private ProjectionSoldeFinAnnee? _projection;
+    private IReadOnlyList<TravailTypePart> _repartition = [];
     private List<FichePaie> _fiches = [];
-    private List<Conge> _conges = [];
+    private List<Conge> _enAttente = [];
     private NewFicheModel _fiche = NewFicheModel.Create();
     private NewCongeModel _conge = NewCongeModel.Create();
 
@@ -283,15 +285,29 @@ else if (_ready)
             return;
         }
 
-        _solde = await Travail.SoldeCongesActuel(Id, DateTime.Today.Year);
-        _fiches = await Travail.ListerFichesPaie(Id);
-        await ReloadCongesAsync();
+        _soldesActifs = await Travail.ListerSoldesEmployeursActifsAsync();
+        _projection = await Travail.PrevoirSoldeFinAnneeAsync(Id);
+        _repartition = await Travail.RepartitionCongesPrisParType(Id, DateTime.Today.Year);
+        _fiches = await Travail.ListerFiches12DerniersMois(Id);
+        _enAttente = await Travail.ListerConges(Id, StatutConge.EnAttente);
     }
 
-    private async Task ReloadCongesAsync()
+    private void ToggleConge()
     {
-        StatutConge? filtre = Enum.TryParse<StatutConge>(_filtreStatut, out var statut) ? statut : null;
-        _conges = await Travail.ListerConges(Id, filtre);
+        _showConge = !_showConge;
+        if (_showConge)
+        {
+            _showPaie = false;
+        }
+    }
+
+    private void TogglePaie()
+    {
+        _showPaie = !_showPaie;
+        if (_showPaie)
+        {
+            _showConge = false;
+        }
     }
 
     private void RecalcJours()
@@ -307,9 +323,7 @@ else if (_ready)
             return;
         }
 
-        _busy = true;
-        _error = null;
-        try
+        await RunAsync(async () =>
         {
             await Travail.AjouterFichePaie(new FichePaie
             {
@@ -323,23 +337,12 @@ else if (_ready)
             });
             _fiche = NewFicheModel.Create();
             _showPaie = false;
-            await ReloadAsync();
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        });
     }
 
     private async Task CreateCongeAsync()
     {
-        _busy = true;
-        _error = null;
-        try
+        await RunAsync(async () =>
         {
             await Travail.DemanderConge(new Conge
             {
@@ -352,25 +355,19 @@ else if (_ready)
             });
             _conge = NewCongeModel.Create();
             _showConge = false;
-            await ReloadAsync();
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        });
     }
 
-    private async Task ChangerStatutAsync(int congeId, StatutConge statut)
+    private async Task ChangerStatutAsync(int congeId, StatutConge statut) =>
+        await RunAsync(() => Travail.ChangerStatutConge(congeId, statut));
+
+    private async Task RunAsync(Func<Task> action)
     {
         _busy = true;
         _error = null;
         try
         {
-            await Travail.ChangerStatutConge(congeId, statut);
+            await action();
             await ReloadAsync();
         }
         catch (Exception ex)
