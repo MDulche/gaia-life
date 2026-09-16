@@ -10,6 +10,9 @@ namespace App.Modules.Finance.Services;
 /// </summary>
 public sealed class FinanceService
 {
+    /// <summary>Catégorie réservée aux sorties vers un compte épargne (exclue du camembert).</summary>
+    public const string CategorieVersementEpargne = "Versement épargne";
+
     private readonly IDbContextFactory<FinanceDbContext> _dbFactory;
 
     public FinanceService(IDbContextFactory<FinanceDbContext> dbFactory)
@@ -352,6 +355,7 @@ public sealed class FinanceService
     public async Task<List<Categorie>> ListerCategoriesAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureCategorieCoreAsync(db, CategorieVersementEpargne, "#20c997", cancellationToken);
         return await db.Categories.AsNoTracking().OrderBy(c => c.Nom).ToListAsync(cancellationToken);
     }
 
@@ -394,13 +398,25 @@ public sealed class FinanceService
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>Totaux par catégorie de sorties sur une période (graphique camembert).</summary>
+    /// <summary>
+    /// Totaux par catégorie de sorties sur une période (graphique camembert).
+    /// Les versements vers un compte d'épargne (catégorie réservée ou compte Type Épargne) sont exclus.
+    /// </summary>
     public async Task<IReadOnlyList<CategorieMontant>> RepartitionParCategorie(DateTime debut, DateTime fin, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var finExclusive = fin.Date.AddDays(1);
+        var epargneIds = await db.Comptes.AsNoTracking()
+            .Where(c => c.Type == TypeCompte.Epargne)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
         var rows = await db.Transactions.AsNoTracking()
-            .Where(t => t.Type == TypeTransaction.Sortie && t.Date >= debut.Date && t.Date < finExclusive)
+            .Where(t => t.Type == TypeTransaction.Sortie
+                && t.Date >= debut.Date
+                && t.Date < finExclusive
+                && t.Categorie != CategorieVersementEpargne
+                && !epargneIds.Contains(t.CompteId))
             .GroupBy(t => t.Categorie)
             .Select(g => new { Categorie = g.Key, Total = g.Sum(t => t.Montant) })
             .ToListAsync(cancellationToken);

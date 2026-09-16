@@ -60,7 +60,8 @@ bld/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
-# Uncomment if you have tasks that create the project's static files in wwwroot
+# Ne pas décommenter : les wwwroot des modules (assets sources, ex. App.Modules.Course/wwwroot)
+# doivent rester versionnés. Les sorties de build restent couvertes par [Bb]in/ et [Oo]bj/.
 #wwwroot/
 
 # Visual Studio 2017 auto generated files
