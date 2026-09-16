@@ -209,6 +209,10 @@ h1:focus {
     --module-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5M3.102 4l1.313 7h8.17l1.313-7zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4m7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4m-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2m7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2'/%3E%3C/svg%3E");
 }
 
+.module-icon.bi-piggy-bank {
+    --module-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 6.375a.625.625 0 1 0-1.25 0 .625.625 0 0 0 1.25 0m4.125.625a.625.625 0 1 1 0-1.25.625.625 0 0 1 0 1.25'/%3E%3Cpath d='M8 1a5 5 0 0 0-4.354 2.64.5.5 0 1 1-.892-.448A6 6 0 0 1 14 6.5v.103c.192.16.37.337.532.53a.5.5 0 1 1-.744.666A5 5 0 0 0 13 6.5V6a5 5 0 0 0-5-5M5.5 11.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5M3 8.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5'/%3E%3Cpath d='M2.5 12a.5.5 0 0 0-.5.5v1.5a.5.5 0 0 0 1 0V13h10v1a.5.5 0 0 0 1 0v-1.5a.5.5 0 0 0-.5-.5z'/%3E%3C/svg%3E");
+}
+
 .finance-amount-in {
     color: #198754;
     font-weight: 600;
@@ -322,6 +326,10 @@ h1:focus {
 
 .finance-account-secondary {
     font-size: 0.9375rem;
+}
+
+.finance-epargne-progress {
+    height: 0.65rem;
 }
 
 #gaia-offline-banner {

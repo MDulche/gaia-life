@@ -19,6 +19,7 @@
         <thead>
             <tr>
                 <th>Nom</th>
+                <th>Type</th>
                 <th>Solde initial</th>
                 <th>Principal</th>
                 <th></th>
@@ -28,7 +29,7 @@
             @if (_comptes.Count == 0)
             {
                 <tr>
-                    <td colspan="4" class="text-muted text-center">Aucun compte pour le moment.</td>
+                    <td colspan="5" class="text-muted text-center">Aucun compte pour le moment.</td>
                 </tr>
             }
             else
@@ -42,6 +43,14 @@
                                 <InputText class="form-control form-control-sm" @bind-Value="_editNom" />
                             </td>
                             <td>
+                                <InputSelect class="form-select form-select-sm" @bind-Value="_editType">
+                                    @foreach (var type in Enum.GetValues<TypeCompte>())
+                                    {
+                                        <option value="@type">@FinanceFormat.TypeCompteNom(type)</option>
+                                    }
+                                </InputSelect>
+                            </td>
+                            <td>
                                 <InputNumber class="form-control form-control-sm" @bind-Value="_editSolde" />
                             </td>
                             <td colspan="2" class="text-nowrap">
@@ -52,6 +61,7 @@
                         else
                         {
                             <td>@compte.Nom</td>
+                            <td>@FinanceFormat.TypeCompteNom(compte.Type)</td>
                             <td>@FinanceFormat.Euro(compte.SoldeInitial)</td>
                             <td>
                                 @if (compte.EstPrincipal)
@@ -78,12 +88,21 @@
 <EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
     <DataAnnotationsValidator />
     <div class="row g-2 align-items-end">
-        <div class="col-md-5">
+        <div class="col-md-3">
             <label class="form-label" for="compte-nom">Nouveau compte</label>
             <InputText id="compte-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
             <ValidationMessage For="() => _nouveau.Nom" />
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <label class="form-label" for="compte-type">Type</label>
+            <InputSelect id="compte-type" class="form-select form-select-sm" @bind-Value="_nouveau.Type">
+                @foreach (var type in Enum.GetValues<TypeCompte>())
+                {
+                    <option value="@type">@FinanceFormat.TypeCompteNom(type)</option>
+                }
+            </InputSelect>
+        </div>
+        <div class="col-md-3">
             <label class="form-label" for="compte-solde">Solde initial (€)</label>
             <InputNumber id="compte-solde" class="form-control form-control-sm" @bind-Value="_nouveau.SoldeInitial" />
         </div>
@@ -100,8 +119,12 @@
     private int? _editId;
     private string _editNom = string.Empty;
     private decimal _editSolde;
+    private TypeCompte _editType = TypeCompte.Courant;
     private CompteForm _nouveau = new();
     private Compte? _pendingDelete;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -112,6 +135,7 @@
         _editId = compte.Id;
         _editNom = compte.Nom;
         _editSolde = compte.SoldeInitial;
+        _editType = compte.Type;
         _error = null;
     }
 
@@ -126,7 +150,7 @@
 
         await RunAsync(async () =>
         {
-            await Finance.ModifierCompteAsync(id, _editNom, _editSolde);
+            await Finance.ModifierCompteAsync(id, _editNom, _editSolde, _editType);
             _editId = null;
         });
     }
@@ -153,7 +177,7 @@
     {
         await RunAsync(async () =>
         {
-            await Finance.AjouterCompteAsync(_nouveau.Nom, _nouveau.SoldeInitial);
+            await Finance.AjouterCompteAsync(_nouveau.Nom, _nouveau.SoldeInitial, _nouveau.Type);
             _nouveau = new CompteForm();
         });
     }
@@ -166,6 +190,7 @@
         {
             await action();
             await ReloadAsync();
+            await OnChanged.InvokeAsync();
         }
         catch (Exception ex)
         {
@@ -184,5 +209,7 @@
         public string Nom { get; set; } = string.Empty;
 
         public decimal SoldeInitial { get; set; }
+
+        public TypeCompte Type { get; set; } = TypeCompte.Courant;
     }
 }

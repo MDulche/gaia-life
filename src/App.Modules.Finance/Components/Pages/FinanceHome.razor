@@ -44,6 +44,8 @@
                 }
             </WidgetCard>
 
+            <FinanceEpargneCard />
+
             @* Calcul provisoire : voir FinanceService.PrevoirSoldeFinDeMoisAsync (moyenne N jours × jours restants). *@
             <WidgetCard Title="Prévision du solde de fin de mois">
                 @if (_prevision is null)

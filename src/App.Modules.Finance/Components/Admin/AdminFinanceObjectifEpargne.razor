@@ -1,0 +1,164 @@
+@inject FinanceService Finance
+
+<h3 class="h6 mt-4">Objectif d'épargne</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="alert alert-success" role="status">@_toast</div>
+}
+
+@if (_epargneComptes.Count == 0)
+{
+    <p class="text-muted mb-0">Créez d'abord un compte de type Épargne pour définir un objectif.</p>
+}
+else
+{
+    <EditForm Model="_form" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label" for="obj-nom">Nom</label>
+                <InputText id="obj-nom" class="form-control form-control-sm" @bind-Value="_form.Nom" />
+                <ValidationMessage For="() => _form.Nom" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="obj-cible">Montant cible (€)</label>
+                <InputNumber id="obj-cible" class="form-control form-control-sm" @bind-Value="_form.MontantCible" />
+                <ValidationMessage For="() => _form.MontantCible" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="obj-date">Date cible (optionnel)</label>
+                <InputDate id="obj-date" class="form-control form-control-sm" @bind-Value="_form.DateCibleOptionnelle" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="obj-compte">Compte épargne</label>
+                <InputSelect id="obj-compte" class="form-select form-select-sm" @bind-Value="_form.CompteId">
+                    @foreach (var compte in _epargneComptes)
+                    {
+                        <option value="@compte.Id">@compte.Nom</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@_busy">Enregistrer</button>
+            </div>
+        </div>
+    </EditForm>
+
+    @if (_aUnObjectif)
+    {
+        <p class="mt-3 mb-0">
+            <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteAsync">
+                Supprimer l'objectif
+            </button>
+            <span class="small text-muted ms-2">Le compte et ses transactions sont conservés.</span>
+        </p>
+    }
+}
+
+@code {
+    [Parameter]
+    public int ComptesVersion { get; set; }
+
+    private bool _busy;
+    private bool _aUnObjectif;
+    private string? _error;
+    private string? _toast;
+    private int _loadedVersion = -1;
+    private List<Compte> _epargneComptes = [];
+    private ObjectifForm _form = ObjectifForm.Create();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedVersion == ComptesVersion)
+        {
+            return;
+        }
+
+        _loadedVersion = ComptesVersion;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _epargneComptes = await Finance.ListerComptesEpargneAsync();
+        var objectif = await Finance.GetObjectifEpargneAsync();
+        _aUnObjectif = objectif is not null;
+        if (objectif is not null)
+        {
+            _form = new ObjectifForm
+            {
+                Nom = objectif.Nom,
+                MontantCible = objectif.MontantCible,
+                DateCibleOptionnelle = objectif.DateCibleOptionnelle,
+                CompteId = objectif.CompteId
+            };
+        }
+        else if (_epargneComptes.Count > 0 && _form.CompteId == 0)
+        {
+            _form.CompteId = _epargneComptes[0].Id;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Finance.EnregistrerObjectifEpargneAsync(
+                _form.Nom,
+                _form.MontantCible,
+                _form.DateCibleOptionnelle,
+                _form.CompteId);
+            _toast = "Objectif d'épargne enregistré.";
+        });
+    }
+
+    private async Task DeleteAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Finance.SupprimerObjectifEpargneAsync();
+            _form = ObjectifForm.Create(_epargneComptes.FirstOrDefault()?.Id ?? 0);
+            _toast = "Objectif d'épargne supprimé.";
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class ObjectifForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
+        public string Nom { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(0.01, 999999999, ErrorMessage = "Le montant cible doit être strictement positif.")]
+        public decimal MontantCible { get; set; }
+
+        public DateTime? DateCibleOptionnelle { get; set; }
+
+        public int CompteId { get; set; }
+
+        public static ObjectifForm Create(int compteId = 0) => new() { CompteId = compteId };
+    }
+}

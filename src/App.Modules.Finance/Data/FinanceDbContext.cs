@@ -25,6 +25,8 @@ public class FinanceDbContext : DbContext
 
     public DbSet<FinanceParametre> Parametres => Set<FinanceParametre>();
 
+    public DbSet<ObjectifEpargne> ObjectifsEpargne => Set<ObjectifEpargne>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Compte>(entity =>
@@ -32,6 +34,10 @@ public class FinanceDbContext : DbContext
             entity.ToTable("Comptes");
             entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
             entity.Property(e => e.SoldeInitial).HasPrecision(18, 2);
+            entity.Property(e => e.Type)
+                .HasConversion<string>()
+                .HasMaxLength(16)
+                .HasDefaultValue(TypeCompte.Courant);
             entity.HasMany(e => e.Transactions)
                 .WithOne(e => e.Compte)
                 .HasForeignKey(e => e.CompteId)
@@ -40,6 +46,10 @@ public class FinanceDbContext : DbContext
                 .WithOne(e => e.Compte)
                 .HasForeignKey(e => e.CompteId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(e => e.ObjectifsEpargne)
+                .WithOne(e => e.Compte)
+                .HasForeignKey(e => e.CompteId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Transaction>(entity =>
@@ -81,6 +91,14 @@ public class FinanceDbContext : DbContext
         modelBuilder.Entity<FinanceParametre>(entity =>
         {
             entity.ToTable("FinanceParametres");
+        });
+
+        modelBuilder.Entity<ObjectifEpargne>(entity =>
+        {
+            entity.ToTable("ObjectifsEpargne");
+            entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.MontantCible).HasPrecision(18, 2);
+            entity.HasIndex(e => e.CompteId);
         });
     }
 }

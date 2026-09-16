@@ -1,10 +1,17 @@
-@* Paramètres Finance : comptes, charges, catégories, prévision. *@
+@* Paramètres Finance : comptes, épargne, charges, catégories, prévision. *@
 <section>
     <h2 class="h5 mb-3">Finance</h2>
     <p class="text-muted">Ces paramètres alimentent la page <a href="/finance">/finance</a>.</p>
-    <AdminFinanceComptes />
+    <AdminFinanceComptes OnChanged="OnComptesChanged" />
+    <AdminFinanceObjectifEpargne ComptesVersion="_comptesVersion" />
     <AdminFinanceChargesMensuelles />
     <AdminFinanceChargesAnnuelles />
     <AdminFinanceCategories />
     <AdminFinancePrevision />
 </section>
+
+@code {
+    private int _comptesVersion;
+
+    private void OnComptesChanged() => _comptesVersion++;
+}

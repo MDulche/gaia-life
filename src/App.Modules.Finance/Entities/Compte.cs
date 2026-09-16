@@ -9,6 +9,9 @@ public class Compte
 
     public decimal SoldeInitial { get; set; }
 
+    /// <summary>Courant par défaut pour les comptes déjà créés.</summary>
+    public TypeCompte Type { get; set; } = TypeCompte.Courant;
+
     /// <summary>Compte mis en avant en premier sur /finance. Un seul à la fois.</summary>
     public bool EstPrincipal { get; set; }
 
@@ -17,4 +20,6 @@ public class Compte
     public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
 
     public ICollection<ChargeMensuelle> ChargesMensuelles { get; set; } = new List<ChargeMensuelle>();
+
+    public ICollection<ObjectifEpargne> ObjectifsEpargne { get; set; } = new List<ObjectifEpargne>();
 }

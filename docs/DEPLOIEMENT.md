@@ -167,7 +167,7 @@ Migrations appliquées par l'application au démarrage :
 | Contexte | Projet | Nom |
 | --- | --- | --- |
 | `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate` |
-| `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance`, `20260916071850_AjoutChargesEtPrincipal` |
+| `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance`, `20260916071850_AjoutChargesEtPrincipal`, `20260916092903_AjoutTypeCompteEtObjectifEpargne` |
 | `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail`, `20260916082127_CouleurTypeConge` |
 | `CourseDbContext` | `src/App.Modules.Course` | `20260916075347_InitialCourse` |
 
@@ -314,7 +314,7 @@ Raccourcis d'urgence (favoris, téléphone) :
 | --- | --- |
 | `/admin` | Redirige vers `/admin/modules` |
 | `/admin/modules` | Activer / désactiver Finance, Travail et Courses |
-| `/admin/finance` | Comptes, charges, catégories, période de prévision (module Finance actif) |
+| `/admin/finance` | Comptes (type Courant/Épargne), objectif d'épargne, charges, catégories, période de prévision (module Finance actif) |
 | `/admin/travail` | Employeurs, soldes de congés, couleurs des types (module Travail actif) |
 | `/admin/travail/soldes-conges` | Jours acquis par employeur et par année (redirige depuis `/travail/employeurs/{id}/solde-conges`) |
 | `/admin/course` | Magasins, catégories Courses, purge d'historique (module Courses actif) |

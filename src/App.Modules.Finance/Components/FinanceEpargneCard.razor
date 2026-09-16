@@ -1,0 +1,94 @@
+@inject FinanceService Finance
+
+<WidgetCard Title="Épargne" Icon="bi-piggy-bank">
+    @if (_loading)
+    {
+        <p class="text-muted mb-0">Chargement…</p>
+    }
+    else
+    {
+        <p class="finance-account-primary mb-2">@FinanceFormat.Euro(_total)</p>
+
+        @if (_progression.AUnObjectif)
+        {
+            <p class="small text-muted mb-1">@_progression.Nom</p>
+            <div class="progress finance-epargne-progress mb-2" role="progressbar"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="@ProgressWidth"
+                 aria-label="Progression de l'objectif d'épargne">
+                <div class="progress-bar" style="width:@ProgressWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></div>
+            </div>
+            <p class="small mb-2">
+                @FinanceFormat.Euro(_progression.MontantActuel)
+                /
+                @FinanceFormat.Euro(_progression.MontantCible)
+                (@FinanceFormat.Pourcent(_progression.Pourcentage))
+            </p>
+            @if (_progression.Atteint)
+            {
+                <p class="small mb-2">Objectif atteint.</p>
+            }
+            else if (_progression.EstimationDisponible && _progression.DateEstimee is DateTime date)
+            {
+                <p class="small mb-2">À ce rythme, objectif atteint vers @FinanceFormat.MoisAnnee(date).</p>
+            }
+            else
+            {
+                <p class="small text-muted mb-2">Pas assez de données pour estimer une date</p>
+            }
+        }
+        else
+        {
+            <p class="small mb-2">
+                <a href="/admin/finance">Définir un objectif d'épargne</a>
+            </p>
+        }
+
+        <p class="small mb-0 d-flex align-items-center gap-1 flex-wrap">
+            @{
+                var variation = _tendance.VariationPourcent;
+            }
+            @if (variation is > 0)
+            {
+                <span class="finance-amount-in" aria-hidden="true">↑</span>
+                <span class="finance-amount-in">@FinanceFormat.Pourcent(variation.Value)</span>
+            }
+            else if (variation is < 0)
+            {
+                <span class="finance-amount-out" aria-hidden="true">↓</span>
+                <span class="finance-amount-out">@FinanceFormat.Pourcent(variation.Value)</span>
+            }
+            else if (_tendance.MoisPrecedent == 0 && _tendance.CeMois > 0)
+            {
+                <span class="finance-amount-in" aria-hidden="true">↑</span>
+                <span>Premiers versements ce mois-ci</span>
+            }
+            else
+            {
+                <span class="text-muted">→</span>
+                <span class="text-muted">0 %</span>
+            }
+            <span class="text-muted">
+                · ce mois @FinanceFormat.Euro(_tendance.CeMois)
+                vs @FinanceFormat.Euro(_tendance.MoisPrecedent)
+            </span>
+        </p>
+    }
+</WidgetCard>
+
+@code {
+    private bool _loading = true;
+    private decimal _total;
+    private ProgressionObjectifEpargne _progression = ProgressionObjectifEpargne.Aucun();
+    private TendanceVersementsEpargne _tendance = new(0, 0, null);
+
+    private int ProgressWidth =>
+        (int)Math.Clamp((double)_progression.Pourcentage, 0, 100);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _total = await Finance.TotalEpargne();
+        _progression = await Finance.ProgressionObjectif();
+        _tendance = await Finance.TendanceVersementsEpargne();
+        _loading = false;
+    }
+}

@@ -1,12 +1,18 @@
 @* Conteneur commun des widgets d'accueil (Finance, Travail, …). *@
 <div class="widget-card card shadow-sm h-100">
     <div class="card-body d-flex flex-column">
-        <h3 class="widget-card-title h6 text-muted mb-2">
-            @if (!string.IsNullOrEmpty(Icon))
+        <h3 class="widget-card-title h6 text-muted mb-2 d-flex align-items-center justify-content-between gap-2">
+            <span>
+                @if (!string.IsNullOrEmpty(Icon))
+                {
+                    <span class="module-icon @Icon me-1" aria-hidden="true"></span>
+                }
+                @Title
+            </span>
+            @if (TitleAccessory is not null)
             {
-                <span class="module-icon @Icon me-1" aria-hidden="true"></span>
+                <span class="widget-card-title-extra fw-normal">@TitleAccessory</span>
             }
-            @Title
         </h3>
         <div class="widget-card-content flex-grow-1">
             @ChildContent
@@ -23,4 +29,7 @@
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? TitleAccessory { get; set; }
 }

@@ -32,7 +32,11 @@ public sealed class FinanceService
         return await db.Comptes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == compteId, cancellationToken);
     }
 
-    public async Task<Compte> AjouterCompteAsync(string nom, decimal soldeInitial, CancellationToken cancellationToken = default)
+    public async Task<Compte> AjouterCompteAsync(
+        string nom,
+        decimal soldeInitial,
+        TypeCompte type = TypeCompte.Courant,
+        CancellationToken cancellationToken = default)
     {
         var trimmed = nom.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
@@ -46,6 +50,7 @@ public sealed class FinanceService
         {
             Nom = trimmed,
             SoldeInitial = soldeInitial,
+            Type = type,
             EstPrincipal = estPrincipal,
             DateCreation = DateTime.Now
         };
@@ -73,6 +78,198 @@ public sealed class FinanceService
         }
 
         return total;
+    }
+
+    /// <summary>Somme des soldes des comptes de type Épargne.</summary>
+    public async Task<decimal> TotalEpargne(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var ids = await db.Comptes.AsNoTracking()
+            .Where(c => c.Type == TypeCompte.Epargne)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        decimal total = 0;
+        foreach (var compteId in ids)
+        {
+            total += await SoldeActuelAsync(db, compteId, cancellationToken);
+        }
+
+        return total;
+    }
+
+    public async Task<List<Compte>> ListerComptesEpargneAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Comptes.AsNoTracking()
+            .Where(c => c.Type == TypeCompte.Epargne)
+            .OrderBy(c => c.Nom)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<ObjectifEpargne?> GetObjectifEpargneAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.ObjectifsEpargne.AsNoTracking()
+            .Include(o => o.Compte)
+            .OrderBy(o => o.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task EnregistrerObjectifEpargneAsync(
+        string nom,
+        decimal montantCible,
+        DateTime? dateCibleOptionnelle,
+        int compteId,
+        CancellationToken cancellationToken = default)
+    {
+        var trimmed = nom.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new InvalidOperationException("Le nom de l'objectif est obligatoire.");
+        }
+
+        if (montantCible <= 0)
+        {
+            throw new InvalidOperationException("Le montant cible doit être strictement positif.");
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var compte = await db.Comptes.FirstOrDefaultAsync(c => c.Id == compteId, cancellationToken)
+            ?? throw new InvalidOperationException("Compte introuvable.");
+        if (compte.Type != TypeCompte.Epargne)
+        {
+            throw new InvalidOperationException("L'objectif doit être lié à un compte d'épargne.");
+        }
+
+        var existant = await db.ObjectifsEpargne.OrderBy(o => o.Id).FirstOrDefaultAsync(cancellationToken);
+        if (existant is null)
+        {
+            db.ObjectifsEpargne.Add(new ObjectifEpargne
+            {
+                Nom = trimmed,
+                MontantCible = decimal.Round(montantCible, 2),
+                DateCibleOptionnelle = dateCibleOptionnelle?.Date,
+                CompteId = compteId
+            });
+        }
+        else
+        {
+            existant.Nom = trimmed;
+            existant.MontantCible = decimal.Round(montantCible, 2);
+            existant.DateCibleOptionnelle = dateCibleOptionnelle?.Date;
+            existant.CompteId = compteId;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SupprimerObjectifEpargneAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var existant = await db.ObjectifsEpargne.OrderBy(o => o.Id).FirstOrDefaultAsync(cancellationToken);
+        if (existant is null)
+        {
+            return;
+        }
+
+        db.ObjectifsEpargne.Remove(existant);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Progression vers l'objectif actif. L'estimation de date utilise la moyenne des versements
+    /// (entrées) des 3 derniers mois calendaires sur le compte lié ; indisponible si cette moyenne
+    /// est nulle ou négative.
+    /// </summary>
+    public async Task<ProgressionObjectifEpargne> ProgressionObjectif(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var objectif = await db.ObjectifsEpargne.AsNoTracking()
+            .OrderBy(o => o.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (objectif is null)
+        {
+            return ProgressionObjectifEpargne.Aucun();
+        }
+
+        var actuel = await SoldeActuelAsync(db, objectif.CompteId, cancellationToken);
+        var pourcentage = objectif.MontantCible <= 0
+            ? 0
+            : decimal.Round(actuel / objectif.MontantCible * 100, 1);
+
+        var today = DateTime.Today;
+        var debut = new DateTime(today.Year, today.Month, 1).AddMonths(-2);
+        var versements = await db.Transactions.AsNoTracking()
+            .Where(t => t.CompteId == objectif.CompteId
+                && t.Type == TypeTransaction.Entree
+                && t.Date >= debut)
+            .SumAsync(t => (decimal?)t.Montant, cancellationToken) ?? 0;
+        var moyenne = versements / 3;
+
+        DateTime? dateEstimee = null;
+        var estimationDisponible = false;
+        if (actuel >= objectif.MontantCible)
+        {
+            dateEstimee = today;
+            estimationDisponible = true;
+        }
+        else if (moyenne > 0)
+        {
+            var restant = objectif.MontantCible - actuel;
+            var mois = (int)Math.Ceiling(restant / moyenne);
+            dateEstimee = new DateTime(today.Year, today.Month, 1).AddMonths(mois);
+            estimationDisponible = true;
+        }
+
+        return new ProgressionObjectifEpargne(
+            true,
+            objectif.Nom,
+            objectif.MontantCible,
+            actuel,
+            pourcentage,
+            dateEstimee,
+            estimationDisponible,
+            actuel >= objectif.MontantCible);
+    }
+
+    public async Task<TendanceVersementsEpargne> TendanceVersementsEpargne(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var ids = await db.Comptes.AsNoTracking()
+            .Where(c => c.Type == TypeCompte.Epargne)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        var ceMoisDebut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var precedentDebut = ceMoisDebut.AddMonths(-1);
+        var ceMois = await VersementsPeriodeAsync(db, ids, ceMoisDebut, ceMoisDebut.AddMonths(1), cancellationToken);
+        var precedent = await VersementsPeriodeAsync(db, ids, precedentDebut, ceMoisDebut, cancellationToken);
+        decimal? variation = precedent == 0
+            ? null
+            : decimal.Round((ceMois - precedent) / precedent * 100, 1);
+
+        return new TendanceVersementsEpargne(ceMois, precedent, variation);
+    }
+
+    private static async Task<decimal> VersementsPeriodeAsync(
+        FinanceDbContext db,
+        List<int> compteIds,
+        DateTime debut,
+        DateTime finExclusive,
+        CancellationToken cancellationToken)
+    {
+        if (compteIds.Count == 0)
+        {
+            return 0;
+        }
+
+        return await db.Transactions.AsNoTracking()
+            .Where(t => compteIds.Contains(t.CompteId)
+                && t.Type == TypeTransaction.Entree
+                && t.Date >= debut
+                && t.Date < finExclusive)
+            .SumAsync(t => (decimal?)t.Montant, cancellationToken) ?? 0;
     }
 
     public async Task<IReadOnlyList<Transaction>> ListerTransactions(
@@ -217,6 +414,10 @@ public sealed class FinanceService
             .ToList();
     }
 
+    /// <summary>Totaux d'entrées et de sorties par mois calendaire, du plus ancien au plus récent.</summary>
+    public Task<IReadOnlyList<MoisTotaux>> TotauxMensuels(int nombreDeMois, CancellationToken cancellationToken = default)
+        => TotauxParMois(nombreDeMois, cancellationToken);
+
     public async Task<IReadOnlyList<MoisTotaux>> TotauxParMois(int nombreDeMois, CancellationToken cancellationToken = default)
     {
         if (nombreDeMois < 1)
@@ -284,7 +485,12 @@ public sealed class FinanceService
         return created;
     }
 
-    public async Task ModifierCompteAsync(int id, string nom, decimal soldeInitial, CancellationToken cancellationToken = default)
+    public async Task ModifierCompteAsync(
+        int id,
+        string nom,
+        decimal soldeInitial,
+        TypeCompte type,
+        CancellationToken cancellationToken = default)
     {
         var trimmed = nom.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
@@ -295,8 +501,17 @@ public sealed class FinanceService
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var compte = await db.Comptes.FirstOrDefaultAsync(c => c.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Compte introuvable.");
+
+        if (compte.Type == TypeCompte.Epargne
+            && type != TypeCompte.Epargne
+            && await db.ObjectifsEpargne.AnyAsync(o => o.CompteId == id, cancellationToken))
+        {
+            throw new InvalidOperationException("Ce compte a un objectif d'épargne. Supprimez l'objectif avant de le passer en compte courant.");
+        }
+
         compte.Nom = trimmed;
         compte.SoldeInitial = decimal.Round(soldeInitial, 2);
+        compte.Type = type;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -656,3 +871,24 @@ public sealed record PrevisionSoldeFinDeMois(
     int JoursRestants,
     decimal MoyenneEntreesParJour,
     decimal MoyenneSortiesParJour);
+
+/// <summary>Progression vers l'objectif d'épargne actif (s'il existe).</summary>
+public sealed record ProgressionObjectifEpargne(
+    bool AUnObjectif,
+    string? Nom,
+    decimal MontantCible,
+    decimal MontantActuel,
+    decimal Pourcentage,
+    DateTime? DateEstimee,
+    bool EstimationDisponible,
+    bool Atteint)
+{
+    public static ProgressionObjectifEpargne Aucun() =>
+        new(false, null, 0, 0, 0, null, false, false);
+}
+
+/// <summary>Versements (entrées) sur les comptes épargne, mois en cours vs mois précédent.</summary>
+public sealed record TendanceVersementsEpargne(
+    decimal CeMois,
+    decimal MoisPrecedent,
+    decimal? VariationPourcent);
