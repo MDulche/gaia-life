@@ -1,20 +1,116 @@
-/* Couleurs Gaia-Life : même thème que le manifeste PWA (theme_color / background_color). */
+/* Thème Gaia-Life : blanc + traits verts (motif), clair / sombre. */
+
 :root {
-    --gaia-primary: #1b6ec2;
-    --gaia-primary-dark: #155a9c;
+    --gaia-primary: #66bb6a;
+    --gaia-primary-dark: #4caf50;
     --gaia-on-primary: #ffffff;
     --gaia-surface: #ffffff;
-    --gaia-sidebar-from: #1b6ec2;
-    --gaia-sidebar-to: #0d3a66;
+    --gaia-line: #66bb6a;
+    --gaia-line-soft: rgba(102, 187, 106, 0.28);
+    --gaia-line-faint: rgba(102, 187, 106, 0.14);
+    --gaia-shadow: rgba(28, 28, 28, 0.06);
+    --gaia-chart-stroke: transparent;
+    --gaia-table-striped-bg: rgba(200, 230, 201, 0.28);
+    --gaia-table-hover-bg: rgba(102, 187, 106, 0.1);
+    /* Traits organiques vivants (gauche → haut-droite), pas un quadrillage. */
+    --gaia-motif: url("/gaia-motif.svg");
+    --gaia-motif-b: url("/gaia-motif-b.svg");
+    --gaia-motif-opacity: 0.82;
 
-    --bs-primary: #1b6ec2;
-    --bs-primary-rgb: 27, 110, 194;
-    --bs-primary-text-emphasis: #0d3a66;
-    --bs-primary-bg-subtle: #d6e6f6;
-    --bs-primary-border-subtle: #9ec2e6;
-    --bs-link-color: #1b6ec2;
-    --bs-link-color-rgb: 27, 110, 194;
-    --bs-link-hover-color: #155a9c;
-    --bs-link-hover-color-rgb: 21, 90, 156;
-    --bs-focus-ring-color: rgba(27, 110, 194, 0.25);
+    --bs-body-bg: #ffffff;
+    --bs-body-bg-rgb: 255, 255, 255;
+    --bs-body-color: #1c1c1c;
+    --bs-body-color-rgb: 28, 28, 28;
+    --bs-emphasis-color: #1c1c1c;
+    --bs-emphasis-color-rgb: 28, 28, 28;
+    --bs-secondary-color: rgba(28, 28, 28, 0.65);
+    --bs-tertiary-color: rgba(28, 28, 28, 0.5);
+    --bs-secondary-bg: #fafcfa;
+    --bs-tertiary-bg: #f5f8f5;
+    --bs-border-color: #c8e6c9;
+    --bs-border-color-translucent: rgba(200, 230, 201, 0.7);
+
+    --bs-primary: #66bb6a;
+    --bs-primary-rgb: 102, 187, 106;
+    --bs-primary-text-emphasis: #1b5e20;
+    --bs-primary-bg-subtle: #ffffff;
+    --bs-primary-border-subtle: #c8e6c9;
+    --bs-link-color: #2e7d32;
+    --bs-link-color-rgb: 46, 125, 50;
+    --bs-link-hover-color: #1b5e20;
+    --bs-link-hover-color-rgb: 27, 94, 32;
+    --bs-focus-ring-color: rgba(102, 187, 106, 0.35);
+
+    --bs-card-bg: var(--bs-body-bg);
+    --bs-card-border-color: var(--bs-border-color);
+    --bs-card-cap-bg: var(--bs-body-bg);
+
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--bs-body-color);
+    --bs-table-border-color: var(--bs-border-color);
+    --bs-table-striped-bg: rgba(200, 230, 201, 0.28);
+    --bs-table-striped-color: var(--bs-body-color);
+    --bs-table-hover-bg: rgba(102, 187, 106, 0.1);
+    --bs-table-hover-color: var(--bs-body-color);
+
+    --bs-form-control-bg: #ffffff;
+    --bs-form-control-disabled-bg: var(--bs-secondary-bg);
+}
+
+[data-theme="dark"] {
+    --gaia-primary: #2e7d32;
+    --gaia-primary-dark: #1b5e20;
+    --gaia-on-primary: #e8f5e9;
+    --gaia-surface: #121212;
+    --gaia-line: #2e7d32;
+    --gaia-line-soft: rgba(46, 125, 50, 0.45);
+    --gaia-line-faint: rgba(46, 125, 50, 0.22);
+    --gaia-shadow: rgba(0, 0, 0, 0.45);
+    --gaia-chart-stroke: rgba(232, 245, 233, 0.35);
+    --gaia-table-striped-bg: rgba(27, 58, 32, 0.45);
+    --gaia-table-hover-bg: rgba(46, 125, 50, 0.22);
+    --gaia-motif: url("/gaia-motif-dark.svg");
+    --gaia-motif-b: url("/gaia-motif-b-dark.svg");
+    --gaia-motif-opacity: 0.65;
+
+    --bs-body-bg: #121212;
+    --bs-body-bg-rgb: 18, 18, 18;
+    --bs-body-color: #e8f5e9;
+    --bs-body-color-rgb: 232, 245, 233;
+    --bs-emphasis-color: #e8f5e9;
+    --bs-emphasis-color-rgb: 232, 245, 233;
+    --bs-secondary-color: rgba(232, 245, 233, 0.7);
+    --bs-tertiary-color: rgba(232, 245, 233, 0.5);
+    --bs-secondary-bg: #161816;
+    --bs-tertiary-bg: #141614;
+    --bs-border-color: #1b3a20;
+    --bs-border-color-translucent: rgba(27, 58, 32, 0.85);
+
+    --bs-primary: #2e7d32;
+    --bs-primary-rgb: 46, 125, 50;
+    --bs-primary-text-emphasis: #a5d6a7;
+    --bs-primary-bg-subtle: #121212;
+    --bs-primary-border-subtle: #1b3a20;
+    --bs-link-color: #81c784;
+    --bs-link-color-rgb: 129, 199, 132;
+    --bs-link-hover-color: #a5d6a7;
+    --bs-link-hover-color-rgb: 165, 214, 167;
+    --bs-focus-ring-color: rgba(46, 125, 50, 0.45);
+
+    --bs-card-bg: var(--bs-body-bg);
+    --bs-card-border-color: var(--bs-border-color);
+    --bs-card-cap-bg: var(--bs-body-bg);
+
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--bs-body-color);
+    --bs-table-border-color: var(--bs-border-color);
+    --bs-table-striped-bg: rgba(27, 58, 32, 0.45);
+    --bs-table-striped-color: var(--bs-body-color);
+    --bs-table-hover-bg: rgba(46, 125, 50, 0.22);
+    --bs-table-hover-color: var(--bs-body-color);
+
+    --bs-form-control-bg: #161816;
+    --bs-form-control-disabled-bg: #141614;
+
+    color-scheme: dark;
 }

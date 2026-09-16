@@ -1,11 +1,12 @@
 ﻿@implements IDisposable
-@* Sidebar : section Modules (actifs) + Administration en bas. Ne plante pas si MariaDB est coupée. *@
+@* Sidebar : section Modules (actifs) + Administration + bascule thème en bas. Ne plante pas si MariaDB est coupée. *@
 @inject ModuleManager ModuleManager
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject NavigationManager Navigation
+@inject IJSRuntime Js
 
 <aside class="sidebar @(_collapsed ? "collapsed" : null)">
-    <div class="top-row navbar navbar-dark">
+    <div class="top-row">
         <a class="navbar-brand" href="" title="Gaia-Life">
             <span class="brand-full">Gaia-Life</span>
             <span class="brand-short" aria-hidden="true">G</span>
@@ -49,20 +50,40 @@
             }
         </nav>
 
-        <AuthorizeView Roles="@AppRoles.Admin">
-            <Authorized>
-                <nav class="nav flex-column nav-admin px-3">
-                    <p class="nav-section">Administration</p>
-                    <div class="nav-item">
-                        <NavLink class="nav-link" href="admin" Match="NavLinkMatch.Prefix">
-                            <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span>
-                            <span class="nav-link-text">Administration</span>
-                            <HealthAlertMark />
-                        </NavLink>
-                    </div>
-                </nav>
-            </Authorized>
-        </AuthorizeView>
+        <div class="nav-footer">
+            <AuthorizeView Roles="@AppRoles.Admin">
+                <Authorized>
+                    <nav class="nav flex-column nav-admin px-3">
+                        <p class="nav-section">Administration</p>
+                        <div class="nav-item">
+                            <NavLink class="nav-link" href="admin" Match="NavLinkMatch.Prefix">
+                                <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span>
+                                <span class="nav-link-text">Administration</span>
+                                <HealthAlertMark />
+                            </NavLink>
+                        </div>
+                    </nav>
+                </Authorized>
+            </AuthorizeView>
+
+            <div class="nav-theme px-3">
+                <button type="button"
+                        class="nav-theme-btn"
+                        title="Basculer le thème clair / sombre"
+                        aria-label="Basculer le thème clair / sombre"
+                        @onclick="ToggleThemeAsync"
+                        @onclick:stopPropagation="true">
+                    <span class="nav-theme-icon nav-theme-icon-moon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278"/></svg>
+                    </span>
+                    <span class="nav-theme-icon nav-theme-icon-sun" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0m0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13m8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5M3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8m10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0m-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0m9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707M4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708"/></svg>
+                    </span>
+                    <span class="nav-link-text nav-theme-label-light">Mode sombre</span>
+                    <span class="nav-link-text nav-theme-label-dark">Mode clair</span>
+                </button>
+            </div>
+        </div>
     </div>
 </aside>
 
@@ -77,6 +98,22 @@
     }
 
     private void ToggleCollapsed() => _collapsed = !_collapsed;
+
+    private async Task ToggleThemeAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("gaiaTheme.toggle");
+        }
+        catch (JSDisconnectedException)
+        {
+            /* ignore */
+        }
+        catch (JSException)
+        {
+            /* ignore */
+        }
+    }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args)
     {

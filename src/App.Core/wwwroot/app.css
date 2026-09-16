@@ -2,6 +2,101 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+body {
+    background-color: var(--bs-body-bg);
+    background-image: none;
+    color: var(--bs-body-color);
+    position: relative;
+}
+
+/* Couche de traits organiques (vivants), pas un motif géométrique plein écran. */
+body::before,
+body::after {
+    content: "";
+    position: fixed;
+    inset: -20% -10%;
+    pointer-events: none;
+    z-index: 0;
+    background-repeat: no-repeat;
+    background-size: 115% auto;
+    background-position: -8% 15%;
+    will-change: transform;
+    transform-origin: 15% 85%;
+}
+
+body::before {
+    background-image: var(--gaia-motif);
+    opacity: var(--gaia-motif-opacity);
+    animation: gaia-drift-a 36s ease-in-out infinite;
+}
+
+body::after {
+    background-image: var(--gaia-motif-b);
+    opacity: calc(var(--gaia-motif-opacity) * 0.75);
+    background-size: 105% auto;
+    background-position: -2% 35%;
+    animation: gaia-drift-b 51s ease-in-out infinite;
+}
+
+@keyframes gaia-drift-a {
+    0%, 100% { transform: rotate(-6deg) translate3d(0, 0, 0); }
+    30% { transform: rotate(-4.5deg) translate3d(22px, -28px, 0); }
+    62% { transform: rotate(-7.5deg) translate3d(-16px, -14px, 0); }
+}
+
+@keyframes gaia-drift-b {
+    0%, 100% { transform: rotate(-8deg) translate3d(0, 0, 0) scale(1.03); }
+    45% { transform: rotate(-6deg) translate3d(-24px, -22px, 0) scale(1.07); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body::before {
+        animation: none;
+        transform: rotate(-6deg);
+    }
+
+    body::after {
+        animation: none;
+        transform: rotate(-8deg) scale(1.03);
+    }
+}
+
+/* Contenu au-dessus du motif. */
+.page,
+.sidebar,
+main,
+#blazor-error-ui,
+#gaia-offline-banner,
+#components-reconnect-modal {
+    position: relative;
+    z-index: 1;
+}
+
+#blazor-error-ui,
+#gaia-offline-banner,
+#components-reconnect-modal {
+    z-index: 1000;
+}
+
+/* Libellés / icônes du bascule thème (pilotés par data-theme sur <html>). */
+.nav-theme-icon-sun,
+.nav-theme-label-dark {
+    display: none !important;
+}
+
+html[data-theme="dark"] .nav-theme-icon-moon,
+html[data-theme="dark"] .nav-theme-label-light {
+    display: none !important;
+}
+
+html[data-theme="dark"] .nav-theme-icon-sun {
+    display: inline-flex !important;
+}
+
+html[data-theme="dark"] .nav-theme-label-dark {
+    display: inline !important;
+}
+
 a, .btn-link {
     color: var(--bs-primary);
 }
@@ -9,7 +104,8 @@ a, .btn-link {
 .btn-primary {
     color: var(--gaia-on-primary);
     background-color: var(--bs-primary);
-    border-color: var(--gaia-primary-dark);
+    border-color: var(--bs-primary);
+    border-radius: 0;
 }
 
 .btn-primary:hover,
@@ -22,6 +118,8 @@ a, .btn-link {
 .btn-outline-primary {
     color: var(--bs-primary);
     border-color: var(--bs-primary);
+    border-radius: 0;
+    background: transparent;
 }
 
 .btn-outline-primary:hover {
@@ -105,14 +203,57 @@ h1:focus {
     }
 }
 
+.form-control,
+.form-select {
+    background-color: var(--bs-form-control-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--bs-form-control-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-primary);
+}
+
+.table {
+    --bs-table-color: var(--bs-body-color);
+    --bs-table-bg: transparent;
+    --bs-table-border-color: var(--bs-border-color);
+    --bs-table-striped-bg: var(--gaia-table-striped-bg);
+    --bs-table-striped-color: var(--bs-body-color);
+    --bs-table-hover-bg: var(--gaia-table-hover-bg);
+    --bs-table-hover-color: var(--bs-body-color);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.card {
+    --bs-card-bg: var(--bs-body-bg);
+    --bs-card-border-color: var(--bs-border-color);
+    --bs-card-color: var(--bs-body-color);
+    background-color: var(--bs-body-bg);
+    border-color: var(--bs-border-color);
+    color: var(--bs-body-color);
+}
+
 .widget-card {
     min-height: 11rem;
+}
+
+.widget-card.card {
+    background-color: color-mix(in srgb, var(--bs-body-bg) 97%, transparent);
+    border: 1px solid var(--bs-border-color);
+    border-left: 3px solid var(--gaia-line);
+    box-shadow: 0 0.125rem 0.25rem var(--gaia-shadow);
 }
 
 .widget-card-title {
     font-size: 0.95rem;
     font-weight: 600;
     letter-spacing: 0.01em;
+    color: var(--bs-secondary-color);
 }
 
 .widget-metric {
@@ -130,10 +271,63 @@ h1:focus {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-bottom-color: var(--bs-border-color);
 }
 
 .admin-tabs .nav-link {
     white-space: nowrap;
+    color: var(--bs-secondary-color);
+}
+
+.admin-tabs .nav-link:hover,
+.admin-tabs .nav-link:focus {
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.admin-tabs .nav-link.active {
+    color: var(--bs-body-color);
+    background-color: var(--bs-body-bg);
+    border-color: var(--bs-border-color) var(--bs-border-color) var(--bs-body-bg);
+}
+
+.list-group-item {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.dropdown-menu {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.dropdown-item {
+    color: var(--bs-body-color);
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+}
+
+.modal-content {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-border-color);
+}
+
+.modal-header,
+.modal-footer {
+    border-color: var(--bs-border-color);
+}
+
+.hr,
+hr {
+    border-color: var(--bs-border-color);
+    opacity: 1;
 }
 
 .health-badge {
@@ -162,6 +356,10 @@ h1:focus {
 .health-badge-ko {
     background-color: #842029;
     color: #fff;
+}
+
+[data-theme="dark"] .health-badge {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
 .health-alert-mark {
@@ -223,9 +421,23 @@ h1:focus {
     font-weight: 600;
 }
 
+[data-theme="dark"] .finance-amount-in {
+    color: #75b798;
+}
+
+[data-theme="dark"] .finance-amount-out {
+    color: #ea868f;
+}
+
 .finance-chart {
     width: 100%;
     max-width: 36rem;
+}
+
+.finance-chart-pie path {
+    stroke: var(--gaia-chart-stroke);
+    stroke-width: 1.35;
+    paint-order: stroke fill;
 }
 
 .finance-legend {
@@ -242,41 +454,58 @@ h1:focus {
     border-radius: 2px;
     margin-right: 0.35rem;
     vertical-align: middle;
+    box-shadow: 0 0 0 1px var(--gaia-chart-stroke);
 }
 
 .finance-dashboard {
     display: grid;
     grid-template-columns: 1fr;
     gap: 1.25rem;
-    align-items: start;
+    align-items: stretch;
+    grid-template-areas:
+        "soldes"
+        "depenses"
+        "prevision"
+        "tickets"
+        "charges-m"
+        "charges-a"
+        "tendances"
+        "epargne";
 }
 
-.finance-dashboard-col {
+.finance-dash-soldes { grid-area: soldes; }
+.finance-dash-depenses { grid-area: depenses; }
+.finance-dash-prevision { grid-area: prevision; }
+.finance-dash-tickets { grid-area: tickets; }
+.finance-dash-charges-m { grid-area: charges-m; }
+.finance-dash-charges-a { grid-area: charges-a; }
+.finance-dash-tendances { grid-area: tendances; }
+.finance-dash-epargne { grid-area: epargne; }
+
+.finance-dash-soldes,
+.finance-dash-depenses,
+.finance-dash-prevision,
+.finance-dash-charges-m,
+.finance-dash-charges-a,
+.finance-dash-tendances,
+.finance-dash-epargne {
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
-    min-width: 0;
+}
+
+.finance-dash-soldes > .widget-card,
+.finance-dash-depenses > .widget-card,
+.finance-dash-prevision > .widget-card,
+.finance-dash-charges-m > .widget-card,
+.finance-dash-charges-a > .widget-card,
+.finance-dash-tendances > .widget-card,
+.finance-dash-epargne > .widget-card {
+    flex: 1 1 auto;
 }
 
 .finance-dashboard .widget-card {
     min-height: 0;
-}
-
-.finance-dashboard-pair {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-    align-items: stretch;
-}
-
-.finance-dashboard-pair-item {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.finance-dashboard-pair-item > .widget-card {
-    flex: 1 1 auto;
 }
 
 .finance-tendances-select {
@@ -311,16 +540,24 @@ h1:focus {
 }
 
 .finance-tendances-in {
-    background: color-mix(in srgb, #198754 14%, white);
+    background: color-mix(in srgb, #198754 18%, var(--bs-body-bg));
     color: #198754;
     padding: 0.45rem 0.2rem;
 }
 
 .finance-tendances-out {
-    background: color-mix(in srgb, #dc3545 12%, white);
+    background: color-mix(in srgb, #dc3545 16%, var(--bs-body-bg));
     color: #dc3545;
     padding: 0.45rem 0.2rem;
     border-top: 1px solid var(--bs-border-color);
+}
+
+[data-theme="dark"] .finance-tendances-in {
+    color: #75b798;
+}
+
+[data-theme="dark"] .finance-tendances-out {
+    color: #ea868f;
 }
 
 .finance-tendances-label {
@@ -381,10 +618,12 @@ h1:focus {
 @media (min-width: 768px) {
     .finance-dashboard {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    }
-
-    .finance-dashboard-pair {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "soldes depenses"
+            "prevision depenses"
+            "tickets depenses"
+            "charges-m charges-a"
+            "tendances epargne";
     }
 
     .course-dashboard {

@@ -31,7 +31,7 @@
                         {
                             <td><InputText class="form-control form-control-sm" @bind-Value="_editNom" /></td>
                             <td>
-                                <input type="color" class="form-control form-control-color form-control-sm" value="@(_editCouleur ?? "#1b6ec2")" @onchange="OnEditColor" />
+                                <input type="color" class="form-control form-control-color form-control-sm" value="@(_editCouleur ?? "#66bb6a")" @onchange="OnEditColor" />
                             </td>
                             <td class="text-nowrap">
                                 <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveEditAsync">Enregistrer</button>
@@ -92,7 +92,7 @@
         string.IsNullOrWhiteSpace(couleur) ? "#6c757d" : couleur;
 
     private void OnNewColor(ChangeEventArgs e) =>
-        _nouveau.Couleur = e.Value?.ToString() ?? "#1b6ec2";
+        _nouveau.Couleur = e.Value?.ToString() ?? "#66bb6a";
 
     private void OnEditColor(ChangeEventArgs e) =>
         _editCouleur = e.Value?.ToString();
@@ -101,7 +101,7 @@
     {
         _editId = categorie.Id;
         _editNom = categorie.Nom;
-        _editCouleur = string.IsNullOrWhiteSpace(categorie.Couleur) ? "#1b6ec2" : categorie.Couleur;
+        _editCouleur = string.IsNullOrWhiteSpace(categorie.Couleur) ? "#66bb6a" : categorie.Couleur;
         _error = null;
     }
 
@@ -156,6 +156,6 @@
         [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
         public string Nom { get; set; } = string.Empty;
 
-        public string Couleur { get; set; } = "#1b6ec2";
+        public string Couleur { get; set; } = "#66bb6a";
     }
 }
