@@ -1,5 +1,5 @@
 @page "/finance"
-@* Liste des comptes. Bloqué si le module est inactif (ActiveModuleGuard). *@
+@* Tableau de bord Finance : soldes, prévision, tickets (maquette), charges, camembert. *@
 @attribute [Authorize]
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
@@ -11,89 +11,142 @@
 {
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <h1 class="h3 mb-0">Finances</h1>
-        <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary" href="/finance/synthese">Synthèse</a>
-            <button type="button" class="btn btn-primary" @onclick="() => _showNewAccount = !_showNewAccount">
-                Ajouter un compte
-            </button>
-        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="/finance/synthese">Synthèse</a>
     </div>
 
-    @if (!string.IsNullOrEmpty(_error))
+    @if (!string.IsNullOrEmpty(_toast))
     {
-        <div class="alert alert-danger" role="alert">@_error</div>
+        <div class="alert alert-info alert-dismissible fade show" role="status">
+            @_toast
+            <button type="button" class="btn-close" aria-label="Fermer" @onclick="() => _toast = null"></button>
+        </div>
     }
 
-    @if (_showNewAccount)
-    {
-        <div class="card shadow-sm mb-4">
-            <div class="card-body">
-                <h2 class="h6 mb-3">Nouveau compte</h2>
-                <EditForm Model="_newAccount" OnValidSubmit="CreateAccountAsync">
-                    <DataAnnotationsValidator />
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-6">
-                            <label class="form-label" for="compte-nom">Nom</label>
-                            <InputText id="compte-nom" class="form-control" @bind-Value="_newAccount.Nom" />
-                            <ValidationMessage For="() => _newAccount.Nom" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label" for="compte-solde">Solde initial (€)</label>
-                            <InputNumber id="compte-solde" class="form-control" @bind-Value="_newAccount.SoldeInitial" />
-                            <ValidationMessage For="() => _newAccount.SoldeInitial" />
-                        </div>
-                        <div class="col-md-2">
-                            <button type="submit" class="btn btn-primary w-100" disabled="@_busy">Créer</button>
-                        </div>
-                    </div>
-                </EditForm>
+    <div class="finance-dashboard">
+        <div class="finance-dashboard-col">
+            <WidgetCard Title="Soldes des comptes" Icon="bi-cash-coin">
+                @if (_comptes.Count == 0)
+                {
+                    <p class="text-muted mb-0">Aucun compte pour le moment. Un administrateur peut en créer depuis l'administration.</p>
+                }
+                else
+                {
+                    <ul class="list-unstyled mb-0">
+                        @for (var i = 0; i < _comptes.Count; i++)
+                        {
+                            var row = _comptes[i];
+                            <li class="d-flex justify-content-between align-items-baseline gap-2 @(i == 0 ? "mb-2" : "mb-1")">
+                                <a class="@(i == 0 ? "finance-account-primary" : "finance-account-secondary") text-decoration-none" href="@($"/finance/comptes/{row.Id}")">@row.Nom</a>
+                                <span class="@(i == 0 ? "finance-account-primary" : "finance-account-secondary")">@FinanceFormat.Euro(row.Solde)</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </WidgetCard>
+
+            @* Calcul provisoire : voir FinanceService.PrevoirSoldeFinDeMoisAsync (moyenne N jours × jours restants). *@
+            <WidgetCard Title="Prévision du solde de fin de mois">
+                @if (_prevision is null)
+                {
+                    <p class="text-muted mb-0">Prévision indisponible.</p>
+                }
+                else
+                {
+                    <p class="widget-metric mb-2">@FinanceFormat.Euro(_prevision.Prevision)</p>
+                    <p class="small text-muted mb-0">
+                        Moyenne sur @_prevision.JoursMoyenne jours, projetée sur @_prevision.JoursRestants jours restants.
+                    </p>
+                }
+            </WidgetCard>
+
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-primary flex-fill" @onclick="ShowComingSoon">Voir ticket</button>
+                <button type="button" class="btn btn-outline-primary flex-fill" @onclick="ShowComingSoon">Entrer un ticket</button>
             </div>
-        </div>
-    }
 
-    @if (_rows.Count == 0)
-    {
-        <p class="text-muted">Aucun compte pour le moment. Créez-en un pour commencer.</p>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>Compte</th>
-                        <th class="text-end">Solde actuel</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in _rows)
-                    {
-                        <tr>
-                            <td>
-                                <a href="@($"/finance/comptes/{row.Id}")">@row.Nom</a>
-                            </td>
-                            <td class="text-end">@FinanceFormat.Euro(row.Solde)</td>
-                        </tr>
-                    }
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th>Total</th>
-                        <th class="text-end">@FinanceFormat.Euro(_rows.Sum(r => r.Solde))</th>
-                    </tr>
-                </tfoot>
-            </table>
+            <WidgetCard Title="Charges mensuelles">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Nom de la charge</th>
+                                <th class="text-end">Montant</th>
+                                <th>Compte associé</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_chargesMensuelles.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-muted text-center">Aucune charge mensuelle configurée</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var charge in _chargesMensuelles)
+                                {
+                                    <tr>
+                                        <td>@charge.Nom</td>
+                                        <td class="text-end">@FinanceFormat.Euro(charge.Montant)</td>
+                                        <td>@charge.Compte.Nom</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </WidgetCard>
         </div>
-    }
+
+        <div class="finance-dashboard-col">
+            <WidgetCard Title="Dépenses du mois">
+                <FinancePieChart Slices="_repartition" EmptyText="Aucune sortie enregistrée ce mois-ci." />
+            </WidgetCard>
+
+            <WidgetCard Title="Charges annuelles">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Nom de la charge</th>
+                                <th class="text-end">Montant</th>
+                                <th>Mois d'échéance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_chargesAnnuelles.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-muted text-center">Aucune charge annuelle configurée</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var charge in _chargesAnnuelles)
+                                {
+                                    <tr>
+                                        <td>@charge.Nom</td>
+                                        <td class="text-end">@FinanceFormat.Euro(charge.Montant)</td>
+                                        <td>@FinanceFormat.NomMois(charge.MoisEcheance)</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </WidgetCard>
+        </div>
+    </div>
 }
 
 @code {
     private bool _ready;
-    private bool _busy;
-    private bool _showNewAccount;
-    private string? _error;
-    private List<CompteRow> _rows = [];
-    private NewAccountModel _newAccount = new();
+    private string? _toast;
+    private List<CompteRow> _comptes = [];
+    private PrevisionSoldeFinDeMois? _prevision;
+    private IReadOnlyList<CategorieMontant> _repartition = [];
+    private List<ChargeMensuelle> _chargesMensuelles = [];
+    private List<ChargeAnnuelle> _chargesAnnuelles = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -102,12 +155,6 @@
             return;
         }
 
-        await ReloadAsync();
-        _ready = true;
-    }
-
-    private async Task ReloadAsync()
-    {
         var comptes = await Finance.ListerComptesAsync();
         var rows = new List<CompteRow>(comptes.Count);
         foreach (var compte in comptes)
@@ -115,38 +162,17 @@
             rows.Add(new CompteRow(compte.Id, compte.Nom, await Finance.SoldeActuel(compte.Id)));
         }
 
-        _rows = rows;
+        _comptes = rows;
+        _prevision = await Finance.PrevoirSoldeFinDeMoisAsync();
+        var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var fin = debut.AddMonths(1).AddDays(-1);
+        _repartition = await Finance.RepartitionParCategorie(debut, fin);
+        _chargesMensuelles = await Finance.ListerChargesMensuellesAsync();
+        _chargesAnnuelles = await Finance.ListerChargesAnnuellesAsync();
+        _ready = true;
     }
 
-    private async Task CreateAccountAsync()
-    {
-        _busy = true;
-        _error = null;
-        try
-        {
-            await Finance.AjouterCompteAsync(_newAccount.Nom, _newAccount.SoldeInitial);
-            _newAccount = new NewAccountModel();
-            _showNewAccount = false;
-            await ReloadAsync();
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
+    private void ShowComingSoon() => _toast = "Fonctionnalité à venir";
 
     private sealed record CompteRow(int Id, string Nom, decimal Solde);
-
-    private sealed class NewAccountModel
-    {
-        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
-        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
-        public string Nom { get; set; } = string.Empty;
-
-        public decimal SoldeInitial { get; set; }
-    }
 }

@@ -1,0 +1,64 @@
+@inject FinanceService Finance
+
+<h3 class="h6 mt-4">Prévision de fin de mois</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="alert alert-success" role="status">@_toast</div>
+}
+
+<EditForm Model="_form" OnValidSubmit="SaveAsync">
+    <DataAnnotationsValidator />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-6">
+            <label class="form-label" for="prevision-jours">Période de moyenne (jours)</label>
+            <InputNumber id="prevision-jours" class="form-control" @bind-Value="_form.Jours" />
+            <ValidationMessage For="() => _form.Jours" />
+            <div class="form-text">Utilisée par le calcul provisoire du solde de fin de mois sur /finance.</div>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private string? _toast;
+    private PrevisionForm _form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _form.Jours = await Finance.GetJoursMoyennePrevisionAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        try
+        {
+            await Finance.SetJoursMoyennePrevisionAsync(_form.Jours);
+            _toast = "Période de moyenne enregistrée.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class PrevisionForm
+    {
+        [System.ComponentModel.DataAnnotations.Range(1, 366, ErrorMessage = "Indiquez une période entre 1 et 366 jours.")]
+        public int Jours { get; set; } = 30;
+    }
+}

@@ -236,6 +236,46 @@ h1:focus {
     vertical-align: middle;
 }
 
+.finance-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.finance-dashboard-col {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 0;
+}
+
+.finance-dashboard .widget-card {
+    min-height: 0;
+}
+
+.finance-chart-pie {
+    max-width: 14rem;
+    margin-inline: auto;
+    display: block;
+}
+
+.finance-account-primary {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--bs-body-color);
+}
+
+.finance-account-secondary {
+    font-size: 0.9375rem;
+}
+
+@media (min-width: 768px) {
+    .finance-dashboard {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+}
+
 #gaia-offline-banner {
     position: fixed;
     top: 0;

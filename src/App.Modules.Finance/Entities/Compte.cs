@@ -9,7 +9,12 @@ public class Compte
 
     public decimal SoldeInitial { get; set; }
 
+    /// <summary>Compte mis en avant en premier sur /finance. Un seul à la fois.</summary>
+    public bool EstPrincipal { get; set; }
+
     public DateTime DateCreation { get; set; }
 
     public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+
+    public ICollection<ChargeMensuelle> ChargesMensuelles { get; set; } = new List<ChargeMensuelle>();
 }

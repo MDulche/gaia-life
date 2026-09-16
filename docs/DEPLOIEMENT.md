@@ -166,7 +166,7 @@ Migrations appliquées par l'application au démarrage :
 | Contexte | Projet | Nom |
 | --- | --- | --- |
 | `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate` |
-| `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance` |
+| `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance`, `20260916071850_AjoutChargesEtPrincipal` |
 | `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail` |
 
 Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suffit en développement (`MigrateAsync`). En production, le même mécanisme s'exécute au démarrage du conteneur ; vous pouvez aussi lancer les commandes `dotnet ef database update` ci-dessus depuis une machine autorisée.
@@ -192,7 +192,7 @@ Gaia-Life est une application **mono-foyer** : Finances et Travail sont des donn
 
 Les rôles servent à l'administration de l'app, pas à isoler les données :
 
-- **Admin** : pages `/admin/modules`, `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
+- **Admin** : pages `/admin/modules`, `/admin/finance` (si le module Finance est actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
 - **Membre** / **Lecture** : accès aux modules actifs, sans les boutons Valider / Refuser.
 
 Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une notion de foyer (ou `UserId`) sur les agrégats, ce qui n'existe pas aujourd'hui.
@@ -310,6 +310,7 @@ Raccourcis d'urgence (favoris, téléphone) :
 | --- | --- |
 | `/admin` | Redirige vers `/admin/modules` |
 | `/admin/modules` | Activer / désactiver Finance et Travail |
+| `/admin/finance` | Comptes, charges, catégories, période de prévision (module Finance actif) |
 | `/admin/utilisateurs` | Rôles Identity |
 | `/admin/systeme` | Environnement et ping MariaDB |
 | `/admin/supervision` | Health checks, dumps, logs WRN/ERR |
@@ -412,7 +413,7 @@ Le déploiement prod reste **manuel** (pas de webhook).
 | Sidebar desktop | Section Modules + Administration en bas, bouton « replier » | Viewport ≥ 641 px ; le menu réduit n'affiche plus que les icônes. |
 | Hamburger | Menu fermé par défaut, ouverture au pictogramme | Viewport 375 px ; Accueil, Finance, Travail, Administration accessibles. |
 | Menu si MariaDB coupée | Accueil / Administration restent visibles | `docker compose ... stop mariadb` ; le menu ne doit pas afficher d'erreur 500. |
-| Onglets `/admin` | 4 URLs distinctes | `/admin/modules`, `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
+| Onglets `/admin` | 5 URLs distinctes | `/admin/modules`, `/admin/finance` (si Finance actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
 | Badge alerte | Point sur Administration + onglet Supervision | Couper MariaDB : le pictogramme × apparaît ; au retour de la base, il disparaît (≤ 15 s ou Rafraîchir). |
 | Widgets | `WidgetCard` commun, grille 2 / 1 colonnes | Accueil : cartes Finance et Travail mêmes titres / métriques ; 375 px = une colonne. |
 | État vide | Carte unique dans la grille, bouton vers `/admin/modules` | Désactiver les modules, ou couper MariaDB : le menu Accueil / Administration reste affiché. |

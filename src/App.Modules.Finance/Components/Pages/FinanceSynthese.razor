@@ -1,7 +1,6 @@
 @page "/finance/synthese"
 @* Graphiques SVG (répartition et totaux mensuels) via FinanceService. *@
 @attribute [Authorize]
-@using System.Globalization
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation
@@ -15,40 +14,7 @@
 
     <section class="mb-5">
         <h2 class="h5 mb-3">Dépenses du mois en cours</h2>
-        @if (_repartition.Count == 0)
-        {
-            <p class="text-muted">Aucune sortie enregistrée ce mois-ci.</p>
-        }
-        else
-        {
-            <svg class="finance-chart mb-3" viewBox="0 0 200 200" role="img" aria-label="Répartition des dépenses par catégorie">
-                @{
-                    var cx = 100d;
-                    var cy = 100d;
-                    var r = 70d;
-                    var start = -90d;
-                    var total = (double)_repartition.Sum(x => x.Total);
-                }
-                @for (var i = 0; i < _repartition.Count; i++)
-                {
-                    var slice = _repartition[i];
-                    var angle = total <= 0 ? 0 : (double)slice.Total / total * 360d;
-                    var path = DonutSlice(cx, cy, r, 36, start, angle);
-                    start += angle;
-                    <path d="@path" fill="@SliceColor(slice, i)"></path>
-                }
-            </svg>
-            <ul class="finance-legend list-unstyled">
-                @for (var i = 0; i < _repartition.Count; i++)
-                {
-                    var slice = _repartition[i];
-                    <li>
-                        <span class="finance-legend-swatch" style="background:@SliceColor(slice, i)"></span>
-                        @slice.Categorie — @FinanceFormat.Euro(slice.Total)
-                    </li>
-                }
-            </ul>
-        }
+        <FinancePieChart Slices="_repartition" EmptyText="Aucune sortie enregistrée ce mois-ci." />
     </section>
 
     <section>
@@ -84,8 +50,6 @@
 }
 
 @code {
-    private static readonly string[] Palette = ["#0d6efd", "#6f42c1", "#fd7e14", "#20c997", "#0dcaf0", "#d63384"];
-
     private bool _ready;
     private IReadOnlyList<CategorieMontant> _repartition = [];
     private IReadOnlyList<MoisTotaux> _totaux = [];
@@ -103,34 +67,4 @@
         _totaux = await Finance.TotauxParMois(6);
         _ready = true;
     }
-
-    private static string SliceColor(CategorieMontant slice, int index) =>
-        string.IsNullOrWhiteSpace(slice.Couleur) ? Palette[index % Palette.Length] : slice.Couleur;
-
-    private static string DonutSlice(double cx, double cy, double outer, double inner, double startDeg, double sweep)
-    {
-        if (sweep >= 359.99)
-        {
-            sweep = 359.99;
-        }
-
-        if (sweep <= 0)
-        {
-            return string.Empty;
-        }
-
-        var start = Deg(startDeg);
-        var end = Deg(startDeg + sweep);
-        var large = sweep > 180 ? 1 : 0;
-        var outerStart = Point(cx, cy, outer, start);
-        var outerEnd = Point(cx, cy, outer, end);
-        var innerStart = Point(cx, cy, inner, end);
-        var innerEnd = Point(cx, cy, inner, start);
-        return $"M {outerStart.X.ToString(CultureInfo.InvariantCulture)} {outerStart.Y.ToString(CultureInfo.InvariantCulture)} A {outer.ToString(CultureInfo.InvariantCulture)} {outer.ToString(CultureInfo.InvariantCulture)} 0 {large} 1 {outerEnd.X.ToString(CultureInfo.InvariantCulture)} {outerEnd.Y.ToString(CultureInfo.InvariantCulture)} L {innerStart.X.ToString(CultureInfo.InvariantCulture)} {innerStart.Y.ToString(CultureInfo.InvariantCulture)} A {inner.ToString(CultureInfo.InvariantCulture)} {inner.ToString(CultureInfo.InvariantCulture)} 0 {large} 0 {innerEnd.X.ToString(CultureInfo.InvariantCulture)} {innerEnd.Y.ToString(CultureInfo.InvariantCulture)} Z";
-    }
-
-    private static double Deg(double deg) => Math.PI / 180d * deg;
-
-    private static (double X, double Y) Point(double cx, double cy, double r, double rad) =>
-        (cx + r * Math.Cos(rad), cy + r * Math.Sin(rad));
 }

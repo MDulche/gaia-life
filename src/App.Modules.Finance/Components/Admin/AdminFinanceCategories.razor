@@ -1,0 +1,161 @@
+@inject FinanceService Finance
+
+<h3 class="h6 mt-4">Catégories du camembert</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+<div class="table-responsive mb-3">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Couleur</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_categories.Count == 0)
+            {
+                <tr>
+                    <td colspan="3" class="text-muted text-center">Aucune catégorie pour le moment.</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var categorie in _categories)
+                {
+                    <tr>
+                        @if (_editId == categorie.Id)
+                        {
+                            <td><InputText class="form-control form-control-sm" @bind-Value="_editNom" /></td>
+                            <td>
+                                <input type="color" class="form-control form-control-color form-control-sm" value="@(_editCouleur ?? "#1b6ec2")" @onchange="OnEditColor" />
+                            </td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveEditAsync">Enregistrer</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _editId = null">Annuler</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@categorie.Nom</td>
+                            <td>
+                                <span class="finance-legend-swatch" style="background:@Swatch(categorie.Couleur)"></span>
+                                <code>@(categorie.Couleur ?? "auto")</code>
+                            </td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="() => StartEdit(categorie)">Modifier</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="() => DeleteAsync(categorie.Id)">Supprimer</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
+    <DataAnnotationsValidator />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-6">
+            <label class="form-label" for="cat-nom">Nouvelle catégorie</label>
+            <InputText id="cat-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+            <ValidationMessage For="() => _nouveau.Nom" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="cat-couleur">Couleur</label>
+            <input id="cat-couleur" type="color" class="form-control form-control-color form-control-sm" value="@_nouveau.Couleur" @onchange="OnNewColor" />
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@_busy">Ajouter</button>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private List<Categorie> _categories = [];
+    private int? _editId;
+    private string _editNom = string.Empty;
+    private string? _editCouleur;
+    private CategorieForm _nouveau = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _categories = await Finance.ListerCategoriesAsync();
+
+    private static string Swatch(string? couleur) =>
+        string.IsNullOrWhiteSpace(couleur) ? "#6c757d" : couleur;
+
+    private void OnNewColor(ChangeEventArgs e) =>
+        _nouveau.Couleur = e.Value?.ToString() ?? "#1b6ec2";
+
+    private void OnEditColor(ChangeEventArgs e) =>
+        _editCouleur = e.Value?.ToString();
+
+    private void StartEdit(Categorie categorie)
+    {
+        _editId = categorie.Id;
+        _editNom = categorie.Nom;
+        _editCouleur = string.IsNullOrWhiteSpace(categorie.Couleur) ? "#1b6ec2" : categorie.Couleur;
+        _error = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editId is not int id)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Finance.ModifierCategorieAsync(id, _editNom, _editCouleur);
+            _editId = null;
+        });
+    }
+
+    private async Task DeleteAsync(int id) =>
+        await RunAsync(() => Finance.SupprimerCategorieAsync(id));
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Finance.AjouterCategorieAsync(_nouveau.Nom, _nouveau.Couleur);
+            _nouveau = new CategorieForm();
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class CategorieForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
+        public string Nom { get; set; } = string.Empty;
+
+        public string Couleur { get; set; } = "#1b6ec2";
+    }
+}

@@ -1,0 +1,173 @@
+@inject FinanceService Finance
+
+<h3 class="h6 mt-4">Charges annuelles</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+<div class="table-responsive mb-3">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Montant</th>
+                <th>Mois d'échéance</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_charges.Count == 0)
+            {
+                <tr>
+                    <td colspan="4" class="text-muted text-center">Aucune charge annuelle configurée.</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var charge in _charges)
+                {
+                    <tr>
+                        @if (_editId == charge.Id)
+                        {
+                            <td><InputText class="form-control form-control-sm" @bind-Value="_editNom" /></td>
+                            <td><InputNumber class="form-control form-control-sm" @bind-Value="_editMontant" /></td>
+                            <td>
+                                <InputSelect class="form-select form-select-sm" @bind-Value="_editMois">
+                                    @for (var mois = 1; mois <= 12; mois++)
+                                    {
+                                        <option value="@mois">@FinanceFormat.NomMois(mois)</option>
+                                    }
+                                </InputSelect>
+                            </td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveEditAsync">Enregistrer</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _editId = null">Annuler</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@charge.Nom</td>
+                            <td>@FinanceFormat.Euro(charge.Montant)</td>
+                            <td>@FinanceFormat.NomMois(charge.MoisEcheance)</td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="() => StartEdit(charge)">Modifier</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="() => DeleteAsync(charge.Id)">Supprimer</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
+    <DataAnnotationsValidator />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label" for="ca-nom">Nouvelle charge</label>
+            <InputText id="ca-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+            <ValidationMessage For="() => _nouveau.Nom" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="ca-montant">Montant (€)</label>
+            <InputNumber id="ca-montant" class="form-control form-control-sm" @bind-Value="_nouveau.Montant" />
+            <ValidationMessage For="() => _nouveau.Montant" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="ca-mois">Mois d'échéance</label>
+            <InputSelect id="ca-mois" class="form-select form-select-sm" @bind-Value="_nouveau.MoisEcheance">
+                @for (var mois = 1; mois <= 12; mois++)
+                {
+                    <option value="@mois">@FinanceFormat.NomMois(mois)</option>
+                }
+            </InputSelect>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@_busy">Ajouter</button>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private List<ChargeAnnuelle> _charges = [];
+    private int? _editId;
+    private string _editNom = string.Empty;
+    private decimal _editMontant;
+    private int _editMois = 1;
+    private ChargeForm _nouveau = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _charges = await Finance.ListerChargesAnnuellesAsync();
+
+    private void StartEdit(ChargeAnnuelle charge)
+    {
+        _editId = charge.Id;
+        _editNom = charge.Nom;
+        _editMontant = charge.Montant;
+        _editMois = charge.MoisEcheance;
+        _error = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editId is not int id)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Finance.ModifierChargeAnnuelleAsync(id, _editNom, _editMontant, _editMois);
+            _editId = null;
+        });
+    }
+
+    private async Task DeleteAsync(int id) =>
+        await RunAsync(() => Finance.SupprimerChargeAnnuelleAsync(id));
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Finance.AjouterChargeAnnuelleAsync(_nouveau.Nom, _nouveau.Montant, _nouveau.MoisEcheance);
+            _nouveau = new ChargeForm();
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class ChargeForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
+        public string Nom { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(0.01, 999999999, ErrorMessage = "Le montant doit être strictement positif.")]
+        public decimal Montant { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Range(1, 12, ErrorMessage = "Indiquez un mois entre janvier et décembre.")]
+        public int MoisEcheance { get; set; } = 1;
+    }
+}

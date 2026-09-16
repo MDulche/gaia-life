@@ -1,6 +1,6 @@
 @page "/admin"
 @page "/admin/{Tab}"
-@* Administration : onglets Modules / Utilisateurs / Système / Supervision. *@
+@* Administration : onglets Modules / Finance / Utilisateurs / Système / Supervision. *@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @implements IDisposable
 @using System.Globalization
@@ -21,6 +21,10 @@
 
 <nav class="admin-tabs nav nav-tabs mb-3" aria-label="Sections d'administration">
     <NavLink class="nav-link" href="/admin/modules" Match="NavLinkMatch.All">Modules</NavLink>
+    @if (_activeKeys.Contains(FinanceModule.ModuleKey))
+    {
+        <NavLink class="nav-link" href="/admin/finance" Match="NavLinkMatch.All">Finance</NavLink>
+    }
     <NavLink class="nav-link" href="/admin/utilisateurs" Match="NavLinkMatch.All">Utilisateurs</NavLink>
     <NavLink class="nav-link" href="/admin/systeme" Match="NavLinkMatch.All">Système</NavLink>
     <NavLink class="nav-link d-inline-flex align-items-center gap-1" href="/admin/supervision" Match="NavLinkMatch.All">
@@ -156,6 +160,10 @@ else if (_tab == "systeme")
         </dl>
     </section>
 }
+else if (_tab == "finance")
+{
+    <AdminFinanceSection />
+}
 else if (_tab == "supervision")
 {
     <section>
@@ -283,7 +291,7 @@ else if (_tab == "supervision")
 
     private static readonly HashSet<string> KnownTabs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "modules", "utilisateurs", "systeme", "supervision"
+        "modules", "finance", "utilisateurs", "systeme", "supervision"
     };
 
     private string _tab = "modules";
@@ -303,6 +311,7 @@ else if (_tab == "supervision")
     private string TabTitle => _tab switch
     {
         "utilisateurs" => "Utilisateurs",
+        "finance" => "Finance",
         "systeme" => "Système",
         "supervision" => "Supervision",
         _ => "Modules"
@@ -325,6 +334,13 @@ else if (_tab == "supervision")
             return;
         }
 
+        await TryLoadModulesAsync();
+        if (requested == "finance" && !_activeKeys.Contains(FinanceModule.ModuleKey))
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
         _tab = requested;
         var tabChanged = _loadedTab != _tab;
         _loadedTab = _tab;
@@ -334,11 +350,7 @@ else if (_tab == "supervision")
             await RefreshSupervisionAsync();
         }
 
-        if (_tab is "modules")
-        {
-            await TryLoadModulesAsync();
-        }
-        else if (_tab is "utilisateurs")
+        if (_tab is "utilisateurs")
         {
             await TryLoadUsersAsync();
         }

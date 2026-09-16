@@ -17,4 +17,14 @@ internal static class FinanceFormat
     }
 
     public static string Mois(DateTime mois) => mois.ToString("MMM yyyy", French);
+
+    public static string NomMois(int mois)
+    {
+        if (mois is < 1 or > 12)
+        {
+            return mois.ToString(French);
+        }
+
+        return new DateTime(2000, mois, 1).ToString("MMMM", French);
+    }
 }

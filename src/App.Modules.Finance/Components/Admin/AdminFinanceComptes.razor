@@ -1,0 +1,188 @@
+@inject FinanceService Finance
+
+<h3 class="h6 mt-4">Comptes</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+@if (_pendingDelete is not null)
+{
+    <div class="alert alert-warning" role="status">
+        <p class="mb-2">Supprimer le compte « @_pendingDelete.Nom » et ses transactions ?</p>
+        <button type="button" class="btn btn-danger btn-sm me-2" disabled="@_busy" @onclick="ConfirmDeleteAsync">Confirmer</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _pendingDelete = null">Annuler</button>
+    </div>
+}
+
+<div class="table-responsive mb-3">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Solde initial</th>
+                <th>Principal</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_comptes.Count == 0)
+            {
+                <tr>
+                    <td colspan="4" class="text-muted text-center">Aucun compte pour le moment.</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var compte in _comptes)
+                {
+                    <tr>
+                        @if (_editId == compte.Id)
+                        {
+                            <td>
+                                <InputText class="form-control form-control-sm" @bind-Value="_editNom" />
+                            </td>
+                            <td>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_editSolde" />
+                            </td>
+                            <td colspan="2" class="text-nowrap">
+                                <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveEditAsync">Enregistrer</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelEdit">Annuler</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@compte.Nom</td>
+                            <td>@FinanceFormat.Euro(compte.SoldeInitial)</td>
+                            <td>
+                                @if (compte.EstPrincipal)
+                                {
+                                    <span class="badge text-bg-primary">Principal</span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-link btn-sm p-0" disabled="@_busy" @onclick="() => SetPrincipalAsync(compte.Id)">Définir</button>
+                                }
+                            </td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="() => StartEdit(compte)">Modifier</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="() => _pendingDelete = compte">Supprimer</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
+    <DataAnnotationsValidator />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label" for="compte-nom">Nouveau compte</label>
+            <InputText id="compte-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+            <ValidationMessage For="() => _nouveau.Nom" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label" for="compte-solde">Solde initial (€)</label>
+            <InputNumber id="compte-solde" class="form-control form-control-sm" @bind-Value="_nouveau.SoldeInitial" />
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@_busy">Ajouter</button>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private List<Compte> _comptes = [];
+    private int? _editId;
+    private string _editNom = string.Empty;
+    private decimal _editSolde;
+    private CompteForm _nouveau = new();
+    private Compte? _pendingDelete;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _comptes = await Finance.ListerComptesAsync();
+
+    private void StartEdit(Compte compte)
+    {
+        _editId = compte.Id;
+        _editNom = compte.Nom;
+        _editSolde = compte.SoldeInitial;
+        _error = null;
+    }
+
+    private void CancelEdit() => _editId = null;
+
+    private async Task SaveEditAsync()
+    {
+        if (_editId is not int id)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Finance.ModifierCompteAsync(id, _editNom, _editSolde);
+            _editId = null;
+        });
+    }
+
+    private async Task SetPrincipalAsync(int id) =>
+        await RunAsync(() => Finance.DefinirComptePrincipalAsync(id));
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is null)
+        {
+            return;
+        }
+
+        var id = _pendingDelete.Id;
+        await RunAsync(async () =>
+        {
+            await Finance.SupprimerCompteAsync(id);
+            _pendingDelete = null;
+        });
+    }
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Finance.AjouterCompteAsync(_nouveau.Nom, _nouveau.SoldeInitial);
+            _nouveau = new CompteForm();
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class CompteForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
+        public string Nom { get; set; } = string.Empty;
+
+        public decimal SoldeInitial { get; set; }
+    }
+}
