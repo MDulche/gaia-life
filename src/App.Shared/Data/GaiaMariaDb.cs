@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 namespace App.Shared.Data;
 
 /// <summary>
-/// Configuration Pomelo unique pour tous les DbContext (Core, Finance, Travail).
+/// Configuration Pomelo unique pour tous les DbContext (Core, Finance, Travail, Course).
 /// La version MariaDB est figée : <c>ServerVersion.AutoDetect</c> ouvrirait une connexion à chaque création
 /// de contexte et contournerait la politique de retry.
 /// </summary>

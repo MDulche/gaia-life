@@ -1,6 +1,6 @@
 @page "/admin"
 @page "/admin/{Tab}"
-@* Administration : onglets Modules / Finance / Utilisateurs / Système / Supervision. *@
+@* Administration : onglets Modules / Finance / Courses / Utilisateurs / Système / Supervision. *@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @implements IDisposable
 @using System.Globalization
@@ -24,6 +24,10 @@
     @if (_activeKeys.Contains(FinanceModule.ModuleKey))
     {
         <NavLink class="nav-link" href="/admin/finance" Match="NavLinkMatch.All">Finance</NavLink>
+    }
+    @if (_activeKeys.Contains(CourseModule.ModuleKey))
+    {
+        <NavLink class="nav-link" href="/admin/course" Match="NavLinkMatch.All">Courses</NavLink>
     }
     <NavLink class="nav-link" href="/admin/utilisateurs" Match="NavLinkMatch.All">Utilisateurs</NavLink>
     <NavLink class="nav-link" href="/admin/systeme" Match="NavLinkMatch.All">Système</NavLink>
@@ -164,6 +168,10 @@ else if (_tab == "finance")
 {
     <AdminFinanceSection />
 }
+else if (_tab == "course")
+{
+    <AdminCourseSection />
+}
 else if (_tab == "supervision")
 {
     <section>
@@ -291,7 +299,7 @@ else if (_tab == "supervision")
 
     private static readonly HashSet<string> KnownTabs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "modules", "finance", "utilisateurs", "systeme", "supervision"
+        "modules", "finance", "course", "utilisateurs", "systeme", "supervision"
     };
 
     private string _tab = "modules";
@@ -312,6 +320,7 @@ else if (_tab == "supervision")
     {
         "utilisateurs" => "Utilisateurs",
         "finance" => "Finance",
+        "course" => "Courses",
         "systeme" => "Système",
         "supervision" => "Supervision",
         _ => "Modules"
@@ -336,6 +345,12 @@ else if (_tab == "supervision")
 
         await TryLoadModulesAsync();
         if (requested == "finance" && !_activeKeys.Contains(FinanceModule.ModuleKey))
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
+        if (requested == "course" && !_activeKeys.Contains(CourseModule.ModuleKey))
         {
             Navigation.NavigateTo("/admin/modules", replace: true);
             return;

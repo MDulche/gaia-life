@@ -13,6 +13,8 @@ services:
       - /workspace/src/App.Modules.Finance/obj
       - /workspace/src/App.Modules.Travail/bin
       - /workspace/src/App.Modules.Travail/obj
+      - /workspace/src/App.Modules.Course/bin
+      - /workspace/src/App.Modules.Course/obj
       - ./logs:/logs
       - ./backups:/backups
     command: ["dotnet", "watch", "run", "--project", "src/App.Core/App.Core.csproj", "--urls", "http://0.0.0.0:8080"]

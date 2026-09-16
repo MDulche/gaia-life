@@ -1,0 +1,146 @@
+@inject CourseService Course
+
+<h3 class="h6 mt-4">Magasins (ordre du parcours)</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+
+<div class="table-responsive mb-3">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Ordre</th>
+                <th>Nom</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_magasins.Count == 0)
+            {
+                <tr>
+                    <td colspan="3" class="text-muted text-center">Aucun magasin pour le moment.</td>
+                </tr>
+            }
+            else
+            {
+                @for (var i = 0; i < _magasins.Count; i++)
+                {
+                    var magasin = _magasins[i];
+                    var index = i;
+                    <tr>
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_busy || index == 0)" @onclick="() => DeplacerAsync(magasin.Id, -1)" title="Monter">↑</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_busy || index == _magasins.Count - 1)" @onclick="() => DeplacerAsync(magasin.Id, 1)" title="Descendre">↓</button>
+                        </td>
+                        @if (_editId == magasin.Id)
+                        {
+                            <td><InputText class="form-control form-control-sm" @bind-Value="_editNom" /></td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveEditAsync">Enregistrer</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _editId = null">Annuler</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@magasin.Nom</td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="() => StartEdit(magasin)">Modifier</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="() => DeleteAsync(magasin.Id)">Supprimer</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
+    <DataAnnotationsValidator />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-8">
+            <label class="form-label" for="mag-nom">Nouveau magasin</label>
+            <InputText id="mag-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+            <ValidationMessage For="() => _nouveau.Nom" />
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@_busy">Ajouter</button>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private List<Magasin> _magasins = [];
+    private int? _editId;
+    private string _editNom = string.Empty;
+    private MagasinForm _nouveau = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _magasins = await Course.ListerMagasinsOrdonnes();
+
+    private void StartEdit(Magasin magasin)
+    {
+        _editId = magasin.Id;
+        _editNom = magasin.Nom;
+        _error = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editId is not int id)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Course.ModifierMagasinAsync(id, _editNom);
+            _editId = null;
+        });
+    }
+
+    private async Task DeplacerAsync(int id, int delta) =>
+        await RunAsync(() => Course.DeplacerMagasinAsync(id, delta));
+
+    private async Task DeleteAsync(int id) =>
+        await RunAsync(() => Course.SupprimerMagasinAsync(id));
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Course.AjouterMagasinAsync(_nouveau.Nom);
+            _nouveau = new MagasinForm();
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class MagasinForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
+        public string Nom { get; set; } = string.Empty;
+    }
+}

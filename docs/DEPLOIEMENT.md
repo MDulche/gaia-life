@@ -45,12 +45,13 @@ docker compose --env-file .env.dev -f docker-compose.dev.yml up
 docker compose -f docker-compose.dev.yml up
 ```
 
-Au premier démarrage, l'application applique aussi les migrations EF Core automatiquement (Identity / `AppDbContext`, puis `FinanceDbContext` et `TravailDbContext` si ces modules sont enregistrés), puis crée les rôles `Admin`, `Membre` et `Lecture`. Vous pouvez également les appliquer à la main depuis l'hôte (MariaDB doit être joignable sur `localhost:3306`) :
+Au premier démarrage, l'application applique aussi les migrations EF Core automatiquement (Identity / `AppDbContext`, puis `FinanceDbContext`, `TravailDbContext` et `CourseDbContext` si ces modules sont enregistrés), puis crée les rôles `Admin`, `Membre` et `Lecture`. Vous pouvez également les appliquer à la main depuis l'hôte (MariaDB doit être joignable sur `localhost:3306`) :
 
 ```bash
 dotnet ef database update --project src/App.Core --startup-project src/App.Core
 dotnet ef database update --context FinanceDbContext --project src/App.Modules.Finance --startup-project src/App.Core
 dotnet ef database update --context TravailDbContext --project src/App.Modules.Travail --startup-project src/App.Core
+dotnet ef database update --context CourseDbContext --project src/App.Modules.Course --startup-project src/App.Core
 ```
 
 L'application est ensuite disponible sur http://localhost:8080. Avec le reverse proxy (certificats mkcert générés, voir ci-dessous) : https://gaia.local ou https://\<IP-LAN\>.
@@ -168,6 +169,7 @@ Migrations appliquées par l'application au démarrage :
 | `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate` |
 | `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance`, `20260916071850_AjoutChargesEtPrincipal` |
 | `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail` |
+| `CourseDbContext` | `src/App.Modules.Course` | `20260916075347_InitialCourse` |
 
 Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suffit en développement (`MigrateAsync`). En production, le même mécanisme s'exécute au démarrage du conteneur ; vous pouvez aussi lancer les commandes `dotnet ef database update` ci-dessus depuis une machine autorisée.
 
@@ -180,7 +182,7 @@ Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suf
 
 Un contexte Identity séparé n'a pas été créé : les tables utilisateurs/rôles sont déjà dans `AppDbContext` (`IdentityDbContext`). Le double enregistrement (factory métier + Scoped Identity) est plus simple qu'un second contexte, et suit le modèle recommandé par EF Core.
 
-`FinanceDbContext` et `TravailDbContext` ne sont enregistrés **que** via `AddDbContextFactory<T>`. `FinanceService` et `TravailService` n'injectent pas le contexte directement.
+`FinanceDbContext`, `TravailDbContext` et `CourseDbContext` ne sont enregistrés **que** via `AddDbContextFactory<T>`. `FinanceService`, `TravailService` et `CourseService` n'injectent pas le contexte directement.
 
 Les factories réutilisent `GaiaMariaDb` (Pomelo `EnableRetryOnFailure`, MariaDB 11.6).
 
@@ -188,11 +190,11 @@ Dans Travail, `SoldeConges.JoursPris` n'est **pas** persisté : il est calculé 
 
 ## Données : foyer partagé, pas de cloisonnement par utilisateur
 
-Gaia-Life est une application **mono-foyer** : Finances et Travail sont des données du foyer, visibles et saisissables par tout compte authentifié (Admin, Membre, Lecture). Il n'y a pas de filtrage « cet utilisateur ne voit que ses fiches de paie / ses employeurs ».
+Gaia-Life est une application **mono-foyer** : Finances, Travail et Courses sont des données du foyer, visibles et saisissables par tout compte authentifié (Admin, Membre, Lecture). Il n'y a pas de filtrage « cet utilisateur ne voit que ses fiches de paie / ses employeurs ».
 
 Les rôles servent à l'administration de l'app, pas à isoler les données :
 
-- **Admin** : pages `/admin/modules`, `/admin/finance` (si le module Finance est actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
+- **Admin** : pages `/admin/modules`, `/admin/finance` (si le module Finance est actif), `/admin/course` (si le module Courses est actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
 - **Membre** / **Lecture** : accès aux modules actifs, sans les boutons Valider / Refuser.
 
 Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une notion de foyer (ou `UserId`) sur les agrégats, ce qui n'existe pas aujourd'hui.
@@ -309,8 +311,9 @@ Raccourcis d'urgence (favoris, téléphone) :
 | URL | Onglet |
 | --- | --- |
 | `/admin` | Redirige vers `/admin/modules` |
-| `/admin/modules` | Activer / désactiver Finance et Travail |
+| `/admin/modules` | Activer / désactiver Finance, Travail et Courses |
 | `/admin/finance` | Comptes, charges, catégories, période de prévision (module Finance actif) |
+| `/admin/course` | Magasins, catégories Courses, purge d'historique (module Courses actif) |
 | `/admin/utilisateurs` | Rôles Identity |
 | `/admin/systeme` | Environnement et ping MariaDB |
 | `/admin/supervision` | Health checks, dumps, logs WRN/ERR |
@@ -411,9 +414,9 @@ Le déploiement prod reste **manuel** (pas de webhook).
 | Volet | Attendu | Comment vérifier |
 | --- | --- | --- |
 | Sidebar desktop | Section Modules + Administration en bas, bouton « replier » | Viewport ≥ 641 px ; le menu réduit n'affiche plus que les icônes. |
-| Hamburger | Menu fermé par défaut, ouverture au pictogramme | Viewport 375 px ; Accueil, Finance, Travail, Administration accessibles. |
+| Hamburger | Menu fermé par défaut, ouverture au pictogramme | Viewport 375 px ; Accueil, Finance, Travail, Courses, Administration accessibles. |
 | Menu si MariaDB coupée | Accueil / Administration restent visibles | `docker compose ... stop mariadb` ; le menu ne doit pas afficher d'erreur 500. |
-| Onglets `/admin` | 5 URLs distinctes | `/admin/modules`, `/admin/finance` (si Finance actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
+| Onglets `/admin` | 6 URLs distinctes | `/admin/modules`, `/admin/finance` (si Finance actif), `/admin/course` (si Courses actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` |
 | Badge alerte | Point sur Administration + onglet Supervision | Couper MariaDB : le pictogramme × apparaît ; au retour de la base, il disparaît (≤ 15 s ou Rafraîchir). |
-| Widgets | `WidgetCard` commun, grille 2 / 1 colonnes | Accueil : cartes Finance et Travail mêmes titres / métriques ; 375 px = une colonne. |
+| Widgets | `WidgetCard` commun, grille 2 / 1 colonnes | Accueil : cartes Finance, Travail et Courses mêmes titres / métriques ; 375 px = une colonne. |
 | État vide | Carte unique dans la grille, bouton vers `/admin/modules` | Désactiver les modules, ou couper MariaDB : le menu Accueil / Administration reste affiché. |

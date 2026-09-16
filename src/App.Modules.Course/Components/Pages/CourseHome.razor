@@ -1,0 +1,274 @@
+@page "/course"
+@* Liste de courses : à acheter / historique, camembert du mois, ordre des magasins. *@
+@attribute [Authorize]
+@using System.Globalization
+@inject CourseService Course
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Courses</PageTitle>
+
+@if (_ready)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h1 class="h3 mb-0">Courses</h1>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleHistorique">
+            @(_historique ? "Retour à la liste" : "Voir les articles achetés")
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    <div class="course-dashboard">
+        <div class="course-dashboard-col">
+            <WidgetCard Title="@(_historique ? "Articles achetés" : "Liste de courses")" Icon="bi-cart">
+                @if (!_historique)
+                {
+                    <EditForm Model="_nouveau" OnValidSubmit="AjouterAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label" for="article-nom">Ajouter un article</label>
+                                <InputText id="article-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+                                <ValidationMessage For="() => _nouveau.Nom" />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="article-qte">Quantité</label>
+                                <InputText id="article-qte" class="form-control form-control-sm" @bind-Value="_nouveau.Quantite" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" for="article-cat">Catégorie</label>
+                                <InputSelect id="article-cat" class="form-select form-select-sm" @bind-Value="_nouveau.CategorieId">
+                                    @foreach (var categorie in _categories)
+                                    {
+                                        <option value="@categorie.Id">@categorie.Nom</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="article-mag">Magasin</label>
+                                <InputSelect id="article-mag" class="form-select form-select-sm" @bind-Value="_nouveau.MagasinId">
+                                    <option value="0">—</option>
+                                    @foreach (var magasin in _magasins)
+                                    {
+                                        <option value="@magasin.Id">@magasin.Nom</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-1">
+                                <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@(_busy || _categories.Count == 0)">Ajouter</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                    @if (_categories.Count == 0)
+                    {
+                        <p class="text-muted small">Créez une catégorie dans l'administration avant d'ajouter un article.</p>
+                    }
+                }
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                @if (!_historique)
+                                {
+                                    <th><span class="visually-hidden">Acheté</span></th>
+                                }
+                                <th>Nom</th>
+                                <th>Quantité</th>
+                                <th>Catégorie</th>
+                                <th>Magasin</th>
+                                @if (_historique)
+                                {
+                                    <th>Acheté le</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_lignes.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="@(_historique ? 5 : 5)" class="text-muted text-center">
+                                        @(_historique ? "Aucun article acheté pour le moment." : "Aucun article à acheter.")
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var article in _lignes)
+                                {
+                                    <tr>
+                                        @if (!_historique)
+                                        {
+                                            <td>
+                                                <input type="checkbox"
+                                                       class="form-check-input"
+                                                       disabled="@_busy"
+                                                       aria-label="@($"Marquer {article.Nom} comme acheté")"
+                                                       @onchange="() => CocherAsync(article.Id)" />
+                                            </td>
+                                        }
+                                        <td>@article.Nom</td>
+                                        <td>@(article.Quantite ?? "—")</td>
+                                        <td>
+                                            <span class="finance-legend-swatch" style="background:@Swatch(article.Categorie.Couleur)"></span>
+                                            @article.Categorie.Nom
+                                        </td>
+                                        <td>@(article.Magasin?.Nom ?? "—")</td>
+                                        @if (_historique)
+                                        {
+                                            <td>@(article.DateAchat?.ToString("g", CultureInfo.GetCultureInfo("fr-FR")) ?? "—")</td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </WidgetCard>
+        </div>
+
+        <div class="course-dashboard-col">
+            <WidgetCard Title="Achats du mois">
+                <CoursePieChart Slices="_repartition" EmptyText="Aucun achat enregistré ce mois-ci." />
+            </WidgetCard>
+
+            <WidgetCard Title="Ordre des magasins à suivre">
+                @if (_parcours.Count == 0)
+                {
+                    <p class="text-muted mb-0">Aucun magasin configuré.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Magasin</th>
+                                    <th class="text-end">À acheter</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var magasin in _parcours)
+                                {
+                                    <tr class="@(magasin.Restants == 0 ? "text-muted" : null)">
+                                        <td>@magasin.Nom</td>
+                                        <td class="text-end">@magasin.Restants</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </WidgetCard>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _ready;
+    private bool _busy;
+    private bool _historique;
+    private string? _error;
+    private List<ArticleCourse> _lignes = [];
+    private List<Categorie> _categories = [];
+    private List<Magasin> _magasins = [];
+    private List<MagasinRestants> _parcours = [];
+    private IReadOnlyList<CourseCategoriePart> _repartition = [];
+    private NouvelArticleForm _nouveau = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await CourseAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _categories = await Course.ListerCategoriesAsync();
+        _magasins = await Course.ListerMagasinsOrdonnes();
+        _parcours = await Course.ListerMagasinsAvecRestantsAsync();
+        _repartition = await Course.RepartitionParCategorie();
+        _lignes = _historique
+            ? await Course.ListerArticlesAchetes()
+            : await Course.ListerArticlesAEnAcheter();
+
+        if (_nouveau.CategorieId == 0 && _categories.Count > 0)
+        {
+            _nouveau.CategorieId = _categories[0].Id;
+        }
+    }
+
+    private async Task ToggleHistorique()
+    {
+        _historique = !_historique;
+        _error = null;
+        await ReloadAsync();
+    }
+
+    private async Task CocherAsync(int id)
+    {
+        await RunAsync(() => Course.BasculerAchete(id));
+    }
+
+    private async Task AjouterAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Course.AjouterArticle(new ArticleCourse
+            {
+                Nom = _nouveau.Nom,
+                Quantite = _nouveau.Quantite,
+                CategorieId = _nouveau.CategorieId,
+                MagasinId = _nouveau.MagasinId == 0 ? null : _nouveau.MagasinId
+            });
+            var cat = _nouveau.CategorieId;
+            var mag = _nouveau.MagasinId;
+            _nouveau = new NouvelArticleForm { CategorieId = cat, MagasinId = mag };
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Swatch(string? couleur) =>
+        string.IsNullOrWhiteSpace(couleur) ? "#6c757d" : couleur;
+
+    private sealed class NouvelArticleForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128, ErrorMessage = "Le nom ne peut pas dépasser 128 caractères.")]
+        public string Nom { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(64, ErrorMessage = "La quantité ne peut pas dépasser 64 caractères.")]
+        public string? Quantite { get; set; }
+
+        public int CategorieId { get; set; }
+
+        public int MagasinId { get; set; }
+    }
+}

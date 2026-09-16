@@ -1,0 +1,39 @@
+@* Widget accueil : articles restants et prochain magasin du parcours. *@
+@inject CourseService Course
+
+<WidgetCard Title="Courses" Icon="bi-cart">
+    @if (_loading)
+    {
+        <p class="text-muted mb-0">Chargement…</p>
+    }
+    else if (_resume.ArticlesRestants == 0)
+    {
+        <p class="widget-metric mb-1">0</p>
+        <p class="text-muted small mb-0">Aucun article à acheter.</p>
+    }
+    else
+    {
+        <p class="widget-metric mb-2">@_resume.ArticlesRestants</p>
+        <p class="small mb-0">
+            @if (string.IsNullOrEmpty(_resume.ProchainMagasin))
+            {
+                <text>Articles à acheter, sans magasin assigné.</text>
+            }
+            else
+            {
+                <text>Prochain magasin · <strong>@_resume.ProchainMagasin</strong></text>
+            }
+        </p>
+    }
+</WidgetCard>
+
+@code {
+    private bool _loading = true;
+    private CourseResumeAccueil _resume = new(0, null);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _resume = await Course.ResumeAccueilAsync();
+        _loading = false;
+    }
+}

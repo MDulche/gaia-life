@@ -1,0 +1,78 @@
+@inject CourseService Course
+
+<h3 class="h6 mt-4">Historique des articles achetés</h3>
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+@if (!string.IsNullOrEmpty(_toast))
+{
+    <div class="alert alert-success" role="status">@_toast</div>
+}
+
+<p class="text-muted small">Supprime les articles déjà achetés dont la date d'achat est <strong>strictement antérieure</strong> à la date choisie. La liste à acheter n'est pas touchée.</p>
+
+<EditForm Model="_form" OnValidSubmit="DemanderConfirmation">
+    <DataAnnotationsValidator />
+    <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label" for="hist-avant">Supprimer les achats avant le</label>
+            <InputDate id="hist-avant" class="form-control" @bind-Value="_form.Avant" />
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-outline-danger" disabled="@_busy">Vider l'historique…</button>
+        </div>
+    </div>
+</EditForm>
+
+@if (_confirmer)
+{
+    <div class="alert alert-warning mt-3" role="status">
+        <p class="mb-2">Supprimer définitivement les articles achetés avant le @_form.Avant.ToString("d") ?</p>
+        <button type="button" class="btn btn-danger btn-sm me-2" disabled="@_busy" @onclick="ConfirmerAsync">Confirmer</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _confirmer = false">Annuler</button>
+    </div>
+}
+
+@code {
+    private bool _busy;
+    private bool _confirmer;
+    private string? _error;
+    private string? _toast;
+    private HistoriqueForm _form = new();
+
+    private void DemanderConfirmation()
+    {
+        _error = null;
+        _toast = null;
+        _confirmer = true;
+    }
+
+    private async Task ConfirmerAsync()
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        try
+        {
+            var n = await Course.ViderHistoriqueAchetesAsync(_form.Avant);
+            _toast = n == 0
+                ? "Aucun article à supprimer pour cette date."
+                : $"{n} article(s) supprimé(s) de l'historique.";
+            _confirmer = false;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class HistoriqueForm
+    {
+        public DateTime Avant { get; set; } = DateTime.Today;
+    }
+}

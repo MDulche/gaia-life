@@ -3,6 +3,7 @@ using App.Core.Data;
 using App.Core.Health;
 using App.Core.Identity;
 using App.Core.Modules;
+using App.Modules.Course;
 using App.Modules.Finance;
 using App.Modules.Travail;
 using App.Shared.Modules;
@@ -149,6 +150,7 @@ builder.Services.AddScoped<IActiveModuleGuard, ActiveModuleGuard>();
 var moduleManager = new ModuleManager();
 moduleManager.Register(new FinanceModule());
 moduleManager.Register(new TravailModule());
+moduleManager.Register(new CourseModule());
 moduleManager.ConfigureAllServices(builder.Services);
 builder.Services.AddSingleton(moduleManager);
 
@@ -229,13 +231,15 @@ app.MapRazorComponents<global::App.Core.Components.App>()
     .AddAdditionalAssemblies(
         typeof(global::App.Shared.AssemblyMarker).Assembly,
         typeof(FinanceModule).Assembly,
-        typeof(TravailModule).Assembly);
+        typeof(TravailModule).Assembly,
+        typeof(CourseModule).Assembly);
 
 try
 {
     await IdentitySeeder.SeedAsync(app.Services);
     await FinanceModule.MigrateAsync(app.Services);
     await TravailModule.MigrateAsync(app.Services);
+    await CourseModule.MigrateAsync(app.Services);
     await app.RunAsync();
 }
 finally

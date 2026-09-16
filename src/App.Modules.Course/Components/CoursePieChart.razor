@@ -1,0 +1,83 @@
+@* Camembert SVG des achats par catégorie (logique dupliquée, pas de dépendance Finance). *@
+@using System.Globalization
+
+@if (Slices.Count == 0)
+{
+    <p class="text-muted mb-0">@EmptyText</p>
+}
+else
+{
+    <svg class="finance-chart finance-chart-pie mb-3" viewBox="0 0 200 200" role="img" aria-label="@AriaLabel">
+        @{
+            var cx = 100d;
+            var cy = 100d;
+            var r = 70d;
+            var start = -90d;
+            var total = (double)Slices.Sum(x => x.Nombre);
+        }
+        @for (var i = 0; i < Slices.Count; i++)
+        {
+            var slice = Slices[i];
+            var angle = total <= 0 ? 0 : slice.Nombre / total * 360d;
+            var path = DonutSlice(cx, cy, r, 36, start, angle);
+            start += angle;
+            <path d="@path" fill="@SliceColor(slice, i)"></path>
+        }
+    </svg>
+    <ul class="finance-legend list-unstyled mb-0">
+        @for (var i = 0; i < Slices.Count; i++)
+        {
+            var slice = Slices[i];
+            <li class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                <span>
+                    <span class="finance-legend-swatch" style="background:@SliceColor(slice, i)"></span>
+                    @slice.Categorie
+                </span>
+                <span>@slice.Nombre @(slice.Nombre > 1 ? "articles" : "article")</span>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private static readonly string[] Palette = ["#0d6efd", "#6f42c1", "#fd7e14", "#20c997", "#0dcaf0", "#d63384"];
+
+    [Parameter]
+    public IReadOnlyList<CourseCategoriePart> Slices { get; set; } = [];
+
+    [Parameter]
+    public string EmptyText { get; set; } = "Aucun achat ce mois-ci.";
+
+    [Parameter]
+    public string AriaLabel { get; set; } = "Répartition des articles achetés par catégorie";
+
+    private static string SliceColor(CourseCategoriePart slice, int index) =>
+        string.IsNullOrWhiteSpace(slice.Couleur) ? Palette[index % Palette.Length] : slice.Couleur!;
+
+    private static string DonutSlice(double cx, double cy, double outer, double inner, double startDeg, double sweep)
+    {
+        if (sweep >= 359.99)
+        {
+            sweep = 359.99;
+        }
+
+        if (sweep <= 0)
+        {
+            return string.Empty;
+        }
+
+        var start = Deg(startDeg);
+        var end = Deg(startDeg + sweep);
+        var large = sweep > 180 ? 1 : 0;
+        var outerStart = Point(cx, cy, outer, start);
+        var outerEnd = Point(cx, cy, outer, end);
+        var innerStart = Point(cx, cy, inner, end);
+        var innerEnd = Point(cx, cy, inner, start);
+        return $"M {outerStart.X.ToString(CultureInfo.InvariantCulture)} {outerStart.Y.ToString(CultureInfo.InvariantCulture)} A {outer.ToString(CultureInfo.InvariantCulture)} {outer.ToString(CultureInfo.InvariantCulture)} 0 {large} 1 {outerEnd.X.ToString(CultureInfo.InvariantCulture)} {outerEnd.Y.ToString(CultureInfo.InvariantCulture)} L {innerStart.X.ToString(CultureInfo.InvariantCulture)} {innerStart.Y.ToString(CultureInfo.InvariantCulture)} A {inner.ToString(CultureInfo.InvariantCulture)} {inner.ToString(CultureInfo.InvariantCulture)} 0 {large} 0 {innerEnd.X.ToString(CultureInfo.InvariantCulture)} {innerEnd.Y.ToString(CultureInfo.InvariantCulture)} Z";
+    }
+
+    private static double Deg(double deg) => Math.PI / 180d * deg;
+
+    private static (double X, double Y) Point(double cx, double cy, double r, double rad) =>
+        (cx + r * Math.Cos(rad), cy + r * Math.Sin(rad));
+}

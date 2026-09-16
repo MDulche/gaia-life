@@ -4,6 +4,7 @@
     <ProjectReference Include="..\App.Shared\App.Shared.csproj" />
     <ProjectReference Include="..\App.Modules.Finance\App.Modules.Finance.csproj" />
     <ProjectReference Include="..\App.Modules.Travail\App.Modules.Travail.csproj" />
+    <ProjectReference Include="..\App.Modules.Course\App.Modules.Course.csproj" />
   </ItemGroup>
 
   <ItemGroup>

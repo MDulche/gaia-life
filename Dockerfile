@@ -6,6 +6,7 @@ COPY src/App.Core/App.Core.csproj src/App.Core/
 COPY src/App.Shared/App.Shared.csproj src/App.Shared/
 COPY src/App.Modules.Finance/App.Modules.Finance.csproj src/App.Modules.Finance/
 COPY src/App.Modules.Travail/App.Modules.Travail.csproj src/App.Modules.Travail/
+COPY src/App.Modules.Course/App.Modules.Course.csproj src/App.Modules.Course/
 RUN dotnet restore GaiaLife.sln
 
 COPY src/ src/
