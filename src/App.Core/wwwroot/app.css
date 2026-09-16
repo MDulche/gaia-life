@@ -262,6 +262,86 @@ h1:focus {
     min-height: 0;
 }
 
+.finance-dashboard-pair {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    align-items: stretch;
+}
+
+.finance-dashboard-pair-item {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.finance-dashboard-pair-item > .widget-card {
+    flex: 1 1 auto;
+}
+
+.finance-tendances-select {
+    width: auto;
+    min-width: 5.5rem;
+    display: inline-block;
+}
+
+.finance-tendances-months {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+}
+
+.finance-tendances-month {
+    flex: 1 1 0;
+    min-width: 3.25rem;
+    text-align: center;
+}
+
+.finance-tendances-rect {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.35rem;
+    overflow: hidden;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.finance-tendances-in {
+    background: color-mix(in srgb, #198754 14%, white);
+    color: #198754;
+    padding: 0.45rem 0.2rem;
+}
+
+.finance-tendances-out {
+    background: color-mix(in srgb, #dc3545 12%, white);
+    color: #dc3545;
+    padding: 0.45rem 0.2rem;
+    border-top: 1px solid var(--bs-border-color);
+}
+
+.finance-tendances-label {
+    margin-top: 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--bs-secondary-color);
+}
+
+.finance-tendances-total {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.35rem;
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+}
+
 .course-dashboard {
     display: grid;
     grid-template-columns: 1fr;
@@ -300,6 +380,10 @@ h1:focus {
 
 @media (min-width: 768px) {
     .finance-dashboard {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .finance-dashboard-pair {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 

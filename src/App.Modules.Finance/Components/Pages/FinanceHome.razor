@@ -1,5 +1,5 @@
 @page "/finance"
-@* Tableau de bord Finance : soldes, prévision, tickets (maquette), charges, camembert. *@
+@* Tableau de bord Finance : soldes, prévision, tickets, charges, camembert, tendances, épargne. *@
 @attribute [Authorize]
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
@@ -43,8 +43,6 @@
                     </ul>
                 }
             </WidgetCard>
-
-            <FinanceEpargneCard />
 
             @* Calcul provisoire : voir FinanceService.PrevoirSoldeFinDeMoisAsync (moyenne N jours × jours restants). *@
             <WidgetCard Title="Prévision du solde de fin de mois">
@@ -137,6 +135,15 @@
                     </table>
                 </div>
             </WidgetCard>
+
+            <div class="finance-dashboard-pair">
+                <div class="finance-dashboard-pair-item">
+                    <FinanceTendancesCard />
+                </div>
+                <div class="finance-dashboard-pair-item">
+                    <FinanceEpargneCard />
+                </div>
+            </div>
         </div>
     </div>
 }

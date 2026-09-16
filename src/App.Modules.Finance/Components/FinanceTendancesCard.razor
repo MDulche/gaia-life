@@ -1,0 +1,74 @@
+@inject FinanceService Finance
+
+<WidgetCard Title="Tendances" Icon="bi-cash-coin">
+    <TitleAccessory>
+        <label class="visually-hidden" for="finance-tendances-periode">Période</label>
+        <select id="finance-tendances-periode" class="form-select form-select-sm finance-tendances-select"
+                value="@_mois" @onchange="OnPeriodeChanged">
+            <option value="3">3 mois</option>
+            <option value="6">6 mois</option>
+            <option value="12">12 mois</option>
+        </select>
+    </TitleAccessory>
+    <ChildContent>
+        @if (_loading)
+        {
+            <p class="text-muted mb-0">Chargement…</p>
+        }
+        else if (_totaux.Count == 0)
+        {
+            <p class="text-muted mb-0">Aucune donnée sur la période.</p>
+        }
+        else
+        {
+            <div class="finance-tendances-months">
+                @foreach (var mois in _totaux)
+                {
+                    <div class="finance-tendances-month">
+                        <div class="finance-tendances-rect" role="img"
+                             aria-label="@($"{FinanceFormat.MoisAbrege(mois.Mois)} : entrées {FinanceFormat.Euro(mois.Entrees)}, sorties {FinanceFormat.Euro(mois.Sorties)}")">
+                            <div class="finance-tendances-in">@FinanceFormat.SigneCompact(mois.Entrees)</div>
+                            <div class="finance-tendances-out">@FinanceFormat.SigneCompact(-mois.Sorties)</div>
+                        </div>
+                        <div class="finance-tendances-label">@FinanceFormat.MoisAbrege(mois.Mois)</div>
+                    </div>
+                }
+            </div>
+
+            <div class="finance-tendances-total mt-3">
+                <span class="small text-muted">Solde net sur @_mois mois</span>
+                <span class="@(_soldeNet >= 0 ? "finance-amount-in" : "finance-amount-out")">
+                    @FinanceFormat.EuroSigne(_soldeNet)
+                </span>
+            </div>
+        }
+    </ChildContent>
+</WidgetCard>
+
+@code {
+    private bool _loading = true;
+    private int _mois = 3;
+    private IReadOnlyList<MoisTotaux> _totaux = [];
+    private decimal _soldeNet;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task OnPeriodeChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var mois) || mois is not (3 or 6 or 12))
+        {
+            return;
+        }
+
+        _mois = mois;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _totaux = await Finance.TotauxMensuels(_mois);
+        _soldeNet = _totaux.Sum(t => t.Entrees - t.Sorties);
+        _loading = false;
+    }
+}
