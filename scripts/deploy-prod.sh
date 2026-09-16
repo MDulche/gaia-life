@@ -39,8 +39,8 @@ fi
 
 "${COMPOSE[@]}" exec -T mariadb-backup sh /scripts/backup.sh
 
-echo "==> docker compose pull (ghcr.io/mdulche/gaia-life)"
-"${COMPOSE[@]}" pull
+echo "==> docker compose build (image locale)"
+"${COMPOSE[@]}" build
 
 echo "==> docker compose up -d"
 "${COMPOSE[@]}" up -d

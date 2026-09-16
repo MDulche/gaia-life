@@ -1,16 +1,20 @@
 # Déploiement Gaia-Life
 
+## Choix d'architecture
+
+Gaia-Life n'utilise volontairement aucun pipeline CI/CD automatisé (pas de GitHub Actions, pas de registre d'images). Le déploiement se fait par build local sur chaque environnement. Ne pas réintroduire de workflow CI sans décision explicite.
+
 ## Table des matières
 
-1. [Fichiers d'environnement](#fichiers-denvironnement)
-2. [Environnement de développement](#environnement-de-développement)
-3. [HTTPS, reverse proxy et PWA](#https-et-pwa)
-4. [Migrations EF Core](#migrations-ef-core)
-5. [DbContext : Identity Scoped et factories métier](#dbcontext--identity-scoped-et-factories-métier)
-6. [Données : foyer partagé](#données--foyer-partagé-pas-de-cloisonnement-par-utilisateur)
-7. [Sauvegarde et restauration](#sauvegarde-et-restauration)
-8. [Logs et health checks](#logs-et-health-checks)
-9. [GitHub Container Registry](#github-container-registry)
+1. [Choix d'architecture](#choix-darchitecture)
+2. [Fichiers d'environnement](#fichiers-denvironnement)
+3. [Environnement de développement](#environnement-de-développement)
+4. [HTTPS, reverse proxy et PWA](#https-et-pwa)
+5. [Migrations EF Core](#migrations-ef-core)
+6. [DbContext : Identity Scoped et factories métier](#dbcontext--identity-scoped-et-factories-métier)
+7. [Données : foyer partagé](#données--foyer-partagé-pas-de-cloisonnement-par-utilisateur)
+8. [Sauvegarde et restauration](#sauvegarde-et-restauration)
+9. [Logs et health checks](#logs-et-health-checks)
 10. [Mise à jour de production](#mise-à-jour-de-production)
 11. [Rollback](#rollback)
 12. [Vérification phase 4](#vérification-phase-4)
@@ -344,32 +348,9 @@ Raccourcis d'urgence (favoris, téléphone) :
 
 Pour un test rapide du check sauvegarde sans attendre 26 h : `HealthChecks__BackupMaxAgeHours=0.01` le temps du test, ou reculer la date du fichier (`touch -d '2 days ago'` dans le conteneur, ou `LastWriteTime` sur l'hôte Windows).
 
-## GitHub Container Registry
-
-L'image de production est :
-
-- `ghcr.io/mdulche/gaia-life:latest`
-- `ghcr.io/mdulche/gaia-life:<sha-court>` (7 premiers caractères du commit)
-
-Le workflow `.github/workflows/build.yml` construit, teste (s'il existe des projets de test), puis pousse ces deux tags **uniquement** sur un push vers `main` (pas les pull requests). Permissions requises : `packages: write` (déjà dans le workflow, via `GITHUB_TOKEN`).
-
-Le package GitHub apparaît sous le dépôt : **Packages** → `gaia-life`. La visibilité suit le dépôt (privé si le repo est privé). À ajuster dans les paramètres du package si vous voulez le rendre public.
-
-### Connexion Docker sur le serveur prod
-
-Le `GITHUB_TOKEN` de la CI ne sert **pas** sur le serveur. Créez un Personal Access Token (fine-grained ou classic) en **lecture seule** sur les packages (`read:packages`), distinct du token CI.
-
-```bash
-echo VOTRE_PAT | docker login ghcr.io -u mdulche --password-stdin
-```
-
-`docker-compose.prod.yml` référence `ghcr.io/mdulche/gaia-life:${APP_IMAGE_TAG:-latest}`. `APP_IMAGE_TAG` se règle dans `.env.prod` (exemple : `latest` ou un sha court pour pinner une version).
-
-Un `docker compose ... --build` local reste possible : Compose tague alors l'image construite avec le même nom.
-
 ## Mise à jour de production
 
-Le déploiement prod est **manuel** : pas de webhook ni de mise à jour automatique. Cela évite une surprise sur l'infra du foyer.
+Le déploiement prod est **manuel** : pas de webhook, pas de CI, pas de registre distant. Cela évite une surprise sur l'infra du foyer.
 
 Sur le serveur, dans le clone du dépôt :
 
@@ -380,17 +361,18 @@ chmod +x scripts/deploy-prod.sh scripts/restore.sh scripts/backup.sh
 
 Le script :
 
-1. `git pull origin main` (compose, Dockerfile, scripts).
+1. `git pull origin main` (sources, compose, Dockerfile, scripts).
 2. Sauvegarde MariaDB via `mariadb-backup` (`scripts/backup.sh`).
-3. `docker compose --env-file .env.prod -f docker-compose.prod.yml pull` (image GHCR).
+3. `docker compose --env-file .env.prod -f docker-compose.prod.yml build` (image locale `gaia-life:local`).
 4. `docker compose ... up -d` (recrée les conteneurs dont l'image a changé).
 5. Attend que le healthcheck `app-core` (`GET /health/live`) soit `healthy`, code de retour non zéro sinon.
 
-Équivalent manuel historique (sans pull GHCR, reconstruction locale) :
+Équivalent manuel :
 
 ```bash
 git pull
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml build
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 ```
 
 MariaDB n'est pas exposée hors du réseau Docker interne. Le volume `./backups` est monté sur `/backups`. Les logs Serilog sont sur `./logs` → `/logs`.
@@ -399,10 +381,10 @@ Après un schéma de base nouveau, les migrations s'appliquent au démarrage de 
 
 ## Rollback
 
-1. Identifier le sha court précédent (Packages GHCR ou `git log`).
+1. Identifier le commit précédent (`git log`).
 2. Sauvegarder l'état actuel (`scripts/backup.sh`) au cas où.
-3. Dans `.env.prod`, poser `APP_IMAGE_TAG=<sha-court-précédent>`.
-4. `docker compose --env-file .env.prod -f docker-compose.prod.yml pull && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d`
+3. `git checkout <commit-précédent>` (ou `git revert` selon la politique du foyer).
+4. `docker compose --env-file .env.prod -f docker-compose.prod.yml build && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d`
 5. Si le schéma de base a avancé et n'est plus compatible, restaurer aussi le dump d'avant la mise à jour (`scripts/restore.sh`), **après** confirmation `OUI`.
 
 ## Vérification phase 4
@@ -413,9 +395,9 @@ Après un schéma de base nouveau, les migrations s'appliquent au démarrage de 
 | --- | --- | --- |
 | PWA | Installation Android Chrome et, si possible, iOS Safari | HTTPS (proxy) ; menu « Ajouter à l'écran d'accueil » ; ouverture `standalone` sans barre d'URL. En Dev, le SW est absent (normal). |
 | Sauvegarde | Dump nocturne + restauration testée | `ls -l backups/` (horodatage le plus récent) ; cycle insert → dump → suppression → `restore.sh`. |
-| GHCR / déploiement | Image poussée, `deploy-prod.sh` OK | Après un push `main` : package `ghcr.io/mdulche/gaia-life`. Sur le serveur : `./scripts/deploy-prod.sh` (sauvegarde puis healthcheck `/health/live`). |
+| Déploiement | `deploy-prod.sh` OK (build local) | Sur le serveur : `./scripts/deploy-prod.sh` (sauvegarde, `build`, puis healthcheck `/health/live`). |
 
-Le déploiement prod reste **manuel** (pas de webhook).
+Le déploiement prod reste **manuel** (pas de webhook ni de CI).
 
 ## Vérification phase 5
 

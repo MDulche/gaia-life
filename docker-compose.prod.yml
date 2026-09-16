@@ -1,9 +1,9 @@
 services:
   app-core:
-    image: ghcr.io/mdulche/gaia-life:${APP_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
+    image: gaia-life:local
     env_file:
       - .env.prod
     environment:
