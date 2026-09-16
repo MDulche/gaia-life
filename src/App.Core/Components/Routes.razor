@@ -1,5 +1,5 @@
-﻿@* Les pages des modules vivent dans des assemblages séparés (Finance, Travail). *@
-<Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="new[] { typeof(global::App.Shared.AssemblyMarker).Assembly, typeof(global::App.Modules.Finance.FinanceModule).Assembly, typeof(global::App.Modules.Travail.TravailModule).Assembly, typeof(global::App.Modules.Course.CourseModule).Assembly }">
+@* Les pages des modules vivent dans des assemblages séparés (Finance, Travail). *@
+<Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="new[] { typeof(global::App.Shared.AssemblyMarker).Assembly, typeof(global::App.Modules.Finance.FinanceModule).Assembly, typeof(global::App.Modules.Travail.TravailModule).Assembly, typeof(global::App.Modules.Course.CourseModule).Assembly, typeof(global::App.Modules.Stock.StockModule).Assembly }">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
             <NotAuthorized>

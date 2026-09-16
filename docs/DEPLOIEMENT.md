@@ -45,13 +45,14 @@ docker compose --env-file .env.dev -f docker-compose.dev.yml up
 docker compose -f docker-compose.dev.yml up
 ```
 
-Au premier démarrage, l'application applique aussi les migrations EF Core automatiquement (Identity / `AppDbContext`, puis `FinanceDbContext`, `TravailDbContext` et `CourseDbContext` si ces modules sont enregistrés), puis crée les rôles `Admin`, `Membre` et `Lecture`. Vous pouvez également les appliquer à la main depuis l'hôte (MariaDB doit être joignable sur `localhost:3306`) :
+Au premier démarrage, l'application applique aussi les migrations EF Core automatiquement (Identity / `AppDbContext`, puis `FinanceDbContext`, `TravailDbContext`, `CourseDbContext` et `StockDbContext` si ces modules sont enregistrés), puis crée les rôles `Admin`, `Membre` et `Lecture`. Vous pouvez également les appliquer à la main depuis l'hôte (MariaDB doit être joignable sur `localhost:3306`) :
 
 ```bash
 dotnet ef database update --project src/App.Core --startup-project src/App.Core
 dotnet ef database update --context FinanceDbContext --project src/App.Modules.Finance --startup-project src/App.Core
 dotnet ef database update --context TravailDbContext --project src/App.Modules.Travail --startup-project src/App.Core
 dotnet ef database update --context CourseDbContext --project src/App.Modules.Course --startup-project src/App.Core
+dotnet ef database update --context StockDbContext --project src/App.Modules.Stock --startup-project src/App.Core
 ```
 
 L'application est ensuite disponible sur http://localhost:8080. Avec le reverse proxy (certificats mkcert générés, voir ci-dessous) : https://gaia.local ou https://\<IP-LAN\>.
@@ -166,12 +167,29 @@ Migrations appliquées par l'application au démarrage :
 
 | Contexte | Projet | Nom |
 | --- | --- | --- |
-| `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate` |
+| `AppDbContext` | `src/App.Core` | `20260914101955_InitialCreate`, `20260916105331_AjoutLiaisonModules` |
 | `FinanceDbContext` | `src/App.Modules.Finance` | `20260914115207_InitialFinance`, `20260916071850_AjoutChargesEtPrincipal`, `20260916092903_AjoutTypeCompteEtObjectifEpargne` |
 | `TravailDbContext` | `src/App.Modules.Travail` | `20260914140730_InitialTravail`, `20260916082127_CouleurTypeConge` |
 | `CourseDbContext` | `src/App.Modules.Course` | `20260916075347_InitialCourse` |
+| `StockDbContext` | `src/App.Modules.Stock` | `20260916105317_InitialStock` |
 
 Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suffit en développement (`MigrateAsync`). En production, le même mécanisme s'exécute au démarrage du conteneur ; vous pouvez aussi lancer les commandes `dotnet ef database update` ci-dessus depuis une machine autorisée.
+
+## Liaisons entre modules (configuration uniquement)
+
+Gaia-Life expose sur `/admin/liaisons` des interrupteurs de **liaison** entre modules (données dans `LiaisonModules` / `AppDbContext`) :
+
+| Paire | Condition d'affichage | Effet actuel |
+| --- | --- | --- |
+| Travail ↔ Finances | Modules `travail` **et** `finance` actifs | Enregistre `EstActive` en base uniquement |
+| Finances ↔ Courses | Modules `finance` **et** `course` actifs | Enregistre `EstActive` en base uniquement |
+| Courses ↔ Stock | Modules `course` **et** `stock` actifs | Enregistre `EstActive` en base uniquement |
+
+Les paires sont celles des modules **consécutifs** dans l'ordre d'`Register` (`Program.cs`). Elles apparaissent aussi **entre chaque module** sur `/admin/modules` (toggle grisé si l'un des deux modules est inactif). L'onglet **Liaisons** n'apparaît que si au moins une paire a ses deux modules actifs. Un badge **Liaison active** apparaît pour chaque module concerné par au moins une liaison activée.
+
+**Important :** à ce stade, activer une liaison **ne déclenche aucune synchronisation** (cocher un article dans Courses ne crée ni dépense Finance ni mouvement Stock). La logique d'interaction réelle reste à développer dans une phase future ; les toggles préparent uniquement l'état de configuration.
+
+L'ordre d'affichage des modules (sidebar, `/admin/modules`, widgets) suit l'ordre d'`Register` dans `Program.cs` (Travail → Finances → Courses → Stock). Aucun champ `Ordre` n'est requis sur `IAppModule`.
 
 ## DbContext : Identity Scoped et factories métier
 
@@ -182,7 +200,7 @@ Après un `git pull` qui ajoute une migration, un redémarrage de `app-core` suf
 
 Un contexte Identity séparé n'a pas été créé : les tables utilisateurs/rôles sont déjà dans `AppDbContext` (`IdentityDbContext`). Le double enregistrement (factory métier + Scoped Identity) est plus simple qu'un second contexte, et suit le modèle recommandé par EF Core.
 
-`FinanceDbContext`, `TravailDbContext` et `CourseDbContext` ne sont enregistrés **que** via `AddDbContextFactory<T>`. `FinanceService`, `TravailService` et `CourseService` n'injectent pas le contexte directement.
+`FinanceDbContext`, `TravailDbContext`, `CourseDbContext` et `StockDbContext` ne sont enregistrés **que** via `AddDbContextFactory<T>`. Les services métier n'injectent pas le contexte directement.
 
 Les factories réutilisent `GaiaMariaDb` (Pomelo `EnableRetryOnFailure`, MariaDB 11.6).
 
@@ -192,11 +210,11 @@ L'ancienne page `/travail/employeurs/{id}/solde-conges` redirige vers `/admin/tr
 
 ## Données : foyer partagé, pas de cloisonnement par utilisateur
 
-Gaia-Life est une application **mono-foyer** : Finances, Travail et Courses sont des données du foyer, visibles et saisissables par tout compte authentifié (Admin, Membre, Lecture). Il n'y a pas de filtrage « cet utilisateur ne voit que ses fiches de paie / ses employeurs ».
+Gaia-Life est une application **mono-foyer** : Finances, Travail, Courses et Stock sont des données du foyer, visibles et saisissables par tout compte authentifié (Admin, Membre, Lecture). Il n'y a pas de filtrage « cet utilisateur ne voit que ses fiches de paie / ses employeurs ».
 
 Les rôles servent à l'administration de l'app, pas à isoler les données :
 
-- **Admin** : pages `/admin/modules`, `/admin/finance` (si le module Finance est actif), `/admin/travail` (si le module Travail est actif, y compris `/admin/travail/soldes-conges`), `/admin/course` (si le module Courses est actif), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
+- **Admin** : pages `/admin/modules`, `/admin/finance` (si Finance actif), `/admin/travail` (si Travail actif, y compris `/admin/travail/soldes-conges`), `/admin/course` (si Courses actif), `/admin/stock` (si Stock actif), `/admin/liaisons` (si au moins une paire de modules liés est active), `/admin/utilisateurs`, `/admin/systeme`, `/admin/supervision` (raccourci `/admin` → modules), activation des modules, validation / refus des congés (`ChangerStatutConge` refuse les non-Admin).
 - **Membre** / **Lecture** : accès aux modules actifs, sans les boutons Valider / Refuser.
 
 Si un cloisonnement multi-ménages devient nécessaire plus tard, il faudra une notion de foyer (ou `UserId`) sur les agrégats, ce qui n'existe pas aujourd'hui.
@@ -313,11 +331,13 @@ Raccourcis d'urgence (favoris, téléphone) :
 | URL | Onglet |
 | --- | --- |
 | `/admin` | Redirige vers `/admin/modules` |
-| `/admin/modules` | Activer / désactiver Finance, Travail et Courses |
+| `/admin/modules` | Activer / désactiver Finance, Travail, Courses et Stock |
 | `/admin/finance` | Comptes (type Courant/Épargne), objectif d'épargne, charges, catégories, période de prévision (module Finance actif) |
 | `/admin/travail` | Employeurs, soldes de congés, couleurs des types (module Travail actif) |
 | `/admin/travail/soldes-conges` | Jours acquis par employeur et par année (redirige depuis `/travail/employeurs/{id}/solde-conges`) |
 | `/admin/course` | Magasins, catégories Courses, purge d'historique (module Courses actif) |
+| `/admin/stock` | Catégories et articles Stock (module Stock actif) |
+| `/admin/liaisons` | Toggles Courses↔Finances / Courses↔Stock (configuration seule, pas de sync métier) |
 | `/admin/utilisateurs` | Rôles Identity |
 | `/admin/systeme` | Environnement et ping MariaDB |
 | `/admin/supervision` | Health checks, dumps, logs WRN/ERR |

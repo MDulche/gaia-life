@@ -1,0 +1,253 @@
+@page "/stock"
+@* Tableau des articles en stock + ajout / édition rapide. *@
+@attribute [Authorize]
+@inject StockService Stock
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Stock</PageTitle>
+
+<h1 class="h3 mb-3">Stock</h1>
+
+@if (!_ready)
+{
+    <p class="text-muted">Chargement…</p>
+}
+else
+{
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    <div class="table-responsive mb-4">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Quantité</th>
+                    <th>Unité</th>
+                    <th>Catégorie</th>
+                    <th>Statut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_articles.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-muted text-center">Aucun article en stock pour le moment.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var article in _articles)
+                    {
+                        <tr>
+                            @if (_editId == article.Id)
+                            {
+                                <td><InputText class="form-control form-control-sm" @bind-Value="_editNom" /></td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_editQuantite" /></td>
+                                <td><InputText class="form-control form-control-sm" @bind-Value="_editUnite" /></td>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_editCategorieId">
+                                        @foreach (var cat in _categories)
+                                        {
+                                            <option value="@cat.Id">@cat.Nom</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td>
+                                    <InputNumber class="form-control form-control-sm" @bind-Value="_editSeuil" placeholder="Seuil" />
+                                </td>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveEditAsync">Enregistrer</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelEdit">Annuler</button>
+                                </td>
+                            }
+                            else
+                            {
+                                <td>@article.Nom</td>
+                                <td>@article.Quantite.ToString("0.###")</td>
+                                <td>@(article.Unite ?? "—")</td>
+                                <td>@(article.Categorie?.Nom ?? "—")</td>
+                                <td>
+                                    @if (StockService.EstStockBas(article))
+                                    {
+                                        <span class="badge text-bg-warning">Stock bas</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">OK</span>
+                                    }
+                                </td>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="() => StartEdit(article)">Modifier</button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="() => DeleteAsync(article.Id)">Supprimer</button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="h6">Ajouter un article</h2>
+    @if (_categories.Count == 0)
+    {
+        <p class="text-muted">Créez d'abord une catégorie dans <a href="/admin/stock">l'administration Stock</a>.</p>
+    }
+    else
+    {
+        <EditForm Model="_nouveau" OnValidSubmit="CreateAsync">
+            <DataAnnotationsValidator />
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label" for="stock-nom">Nom</label>
+                    <InputText id="stock-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+                    <ValidationMessage For="() => _nouveau.Nom" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="stock-qte">Quantité</label>
+                    <InputNumber id="stock-qte" class="form-control form-control-sm" @bind-Value="_nouveau.Quantite" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="stock-unite">Unité</label>
+                    <InputText id="stock-unite" class="form-control form-control-sm" @bind-Value="_nouveau.Unite" placeholder="kg, unité…" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="stock-seuil">Seuil alerte</label>
+                    <InputNumber id="stock-seuil" class="form-control form-control-sm" @bind-Value="_nouveau.SeuilAlerte" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="stock-cat">Catégorie</label>
+                    <InputSelect id="stock-cat" class="form-select form-select-sm" @bind-Value="_nouveau.CategorieId">
+                        @foreach (var cat in _categories)
+                        {
+                            <option value="@cat.Id">@cat.Nom</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@_busy">Ajouter</button>
+                </div>
+            </div>
+        </EditForm>
+    }
+}
+
+@code {
+    private bool _ready;
+    private bool _busy;
+    private string? _error;
+    private List<ArticleStock> _articles = [];
+    private List<Categorie> _categories = [];
+    private ArticleForm _nouveau = new();
+    private int? _editId;
+    private string _editNom = string.Empty;
+    private decimal _editQuantite;
+    private string? _editUnite;
+    private decimal? _editSeuil;
+    private int _editCategorieId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await StockAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _articles = await Stock.ListerArticlesAsync();
+        _categories = await Stock.ListerCategoriesAsync();
+        if (_nouveau.CategorieId == 0 && _categories.Count > 0)
+        {
+            _nouveau.CategorieId = _categories[0].Id;
+        }
+    }
+
+    private void StartEdit(ArticleStock article)
+    {
+        _editId = article.Id;
+        _editNom = article.Nom;
+        _editQuantite = article.Quantite;
+        _editUnite = article.Unite;
+        _editSeuil = article.SeuilAlerte;
+        _editCategorieId = article.CategorieId;
+        _error = null;
+    }
+
+    private void CancelEdit() => _editId = null;
+
+    private async Task SaveEditAsync()
+    {
+        if (_editId is not int id)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Stock.ModifierArticleAsync(id, _editNom, _editQuantite, _editUnite, _editSeuil, _editCategorieId);
+            _editId = null;
+        });
+    }
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(async () =>
+        {
+            await Stock.AjouterArticleAsync(
+                _nouveau.Nom,
+                _nouveau.Quantite,
+                _nouveau.Unite,
+                _nouveau.SeuilAlerte,
+                _nouveau.CategorieId);
+            _nouveau = new ArticleForm { CategorieId = _categories.FirstOrDefault()?.Id ?? 0 };
+        });
+    }
+
+    private async Task DeleteAsync(int id) =>
+        await RunAsync(async () => await Stock.SupprimerArticleAsync(id));
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class ArticleForm
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Le nom est obligatoire.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(128)]
+        public string Nom { get; set; } = string.Empty;
+
+        public decimal Quantite { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(32)]
+        public string? Unite { get; set; }
+
+        public decimal? SeuilAlerte { get; set; }
+
+        public int CategorieId { get; set; }
+    }
+}

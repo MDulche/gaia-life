@@ -4,6 +4,7 @@ using App.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace App.Core.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916105331_AjoutLiaisonModules")]
+    partial class AjoutLiaisonModules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,32 +24,6 @@ namespace App.Core.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
-
-            modelBuilder.Entity("App.Core.Data.AppParametrage", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("DossierLocal")
-                        .HasMaxLength(512)
-                        .HasColumnType("varchar(512)");
-
-                    b.Property<string>("Mode")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("varchar(16)");
-
-                    b.Property<string>("UrlServeur")
-                        .HasMaxLength(512)
-                        .HasColumnType("varchar(512)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AppParametrage", (string)null);
-                });
 
             modelBuilder.Entity("App.Core.Data.LiaisonModules", b =>
                 {

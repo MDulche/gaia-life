@@ -1,7 +1,7 @@
 @page "/admin"
 @page "/admin/{Tab}"
 @page "/admin/{Tab}/{Section}"
-@* Administration : onglets Modules / Finance / Travail / Courses / Utilisateurs / Système / Supervision. *@
+@* Administration : onglets Modules / … / Paramétrage / Utilisateurs / Système / Supervision. *@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @implements IDisposable
 @using System.Globalization
@@ -22,18 +22,27 @@
 
 <nav class="admin-tabs nav nav-tabs mb-3" aria-label="Sections d'administration">
     <NavLink class="nav-link" href="/admin/modules" Match="NavLinkMatch.All">Modules</NavLink>
-    @if (_activeKeys.Contains(FinanceModule.ModuleKey))
-    {
-        <NavLink class="nav-link" href="/admin/finance" Match="NavLinkMatch.All">Finance</NavLink>
-    }
     @if (_activeKeys.Contains(TravailModule.ModuleKey))
     {
         <NavLink class="nav-link" href="/admin/travail" Match="NavLinkMatch.Prefix">Travail</NavLink>
+    }
+    @if (_activeKeys.Contains(FinanceModule.ModuleKey))
+    {
+        <NavLink class="nav-link" href="/admin/finance" Match="NavLinkMatch.All">Finance</NavLink>
     }
     @if (_activeKeys.Contains(CourseModule.ModuleKey))
     {
         <NavLink class="nav-link" href="/admin/course" Match="NavLinkMatch.All">Courses</NavLink>
     }
+    @if (_activeKeys.Contains(StockModule.ModuleKey))
+    {
+        <NavLink class="nav-link" href="/admin/stock" Match="NavLinkMatch.All">Stock</NavLink>
+    }
+    @if (_showLiaisonsTab)
+    {
+        <NavLink class="nav-link" href="/admin/liaisons" Match="NavLinkMatch.All">Liaisons</NavLink>
+    }
+    <NavLink class="nav-link" href="/admin/parametrage" Match="NavLinkMatch.All">Paramétrage</NavLink>
     <NavLink class="nav-link" href="/admin/utilisateurs" Match="NavLinkMatch.All">Utilisateurs</NavLink>
     <NavLink class="nav-link" href="/admin/systeme" Match="NavLinkMatch.All">Système</NavLink>
     <NavLink class="nav-link d-inline-flex align-items-center gap-1" href="/admin/supervision" Match="NavLinkMatch.All">
@@ -66,8 +75,11 @@
                     }
                     else
                     {
-                        @foreach (var module in ModuleManager.AllModules)
+                        var modules = ModuleManager.AllModules;
+                        var pairs = LiaisonModulesService.BuildAdjacentPairs(modules);
+                        for (var i = 0; i < modules.Count; i++)
                         {
+                            var module = modules[i];
                             var isActive = _activeKeys.Contains(module.Key);
                             <tr>
                                 <td><span class="module-icon @module.Icon" title="@module.Icon" aria-hidden="true"></span></td>
@@ -77,6 +89,10 @@
                                     @if (isActive)
                                     {
                                         <span class="badge text-bg-success">Actif</span>
+                                        @if (_keysAvecLiaison.Contains(module.Key))
+                                        {
+                                            <span class="badge text-bg-info ms-1">Liaison active</span>
+                                        }
                                     }
                                     else
                                     {
@@ -94,12 +110,50 @@
                                     </div>
                                 </td>
                             </tr>
+                            @if (i < pairs.Count)
+                            {
+                                var paire = pairs[i];
+                                var bothActive = LiaisonModulesService.PairVisible(paire, _activeKeys);
+                                var liaisonOn = LiaisonModulesService.IsPairActive(_liaisons, paire);
+                                <tr class="table-liaison-row @(bothActive ? null : "opacity-50")">
+                                    <td colspan="3" class="small ps-4">
+                                        <span class="text-muted">Liaison</span>
+                                        <strong class="ms-1">@paire.Titre</strong>
+                                        <div class="text-muted small mt-1">@paire.Description</div>
+                                    </td>
+                                    <td>
+                                        @if (liaisonOn && bothActive)
+                                        {
+                                            <span class="badge text-bg-info">Active</span>
+                                        }
+                                        else if (!bothActive)
+                                        {
+                                            <span class="badge text-bg-secondary">Modules requis</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   role="switch"
+                                                   title="@paire.Titre"
+                                                   checked="@liaisonOn"
+                                                   disabled="@(_busy || !bothActive)"
+                                                   @onchange="async _ => await ToggleLiaisonAsync(paire, !liaisonOn)" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
                         }
                     }
                 </tbody>
             </table>
         </div>
     </section>
+}
+else if (_tab == "parametrage")
+{
+    <AdminParametrageSection />
 }
 else if (_tab == "utilisateurs")
 {
@@ -180,6 +234,47 @@ else if (_tab == "travail")
 else if (_tab == "course")
 {
     <AdminCourseSection />
+}
+else if (_tab == "stock")
+{
+    <AdminStockSection />
+}
+else if (_tab == "liaisons")
+{
+    <section>
+        <h2 class="h5 mb-3">Liaisons entre modules</h2>
+        <p class="text-muted">
+            Ces interrupteurs enregistrent uniquement un état de configuration.
+            Aucune synchronisation automatique n'est exécutée pour le moment.
+        </p>
+        @if (_pairesVisibles.Count == 0)
+        {
+            <p class="text-muted">Activez au moins une paire de modules concernés pour configurer une liaison.</p>
+        }
+        else
+        {
+            @foreach (var paire in _pairesVisibles)
+            {
+                var active = LiaisonModulesService.IsPairActive(_liaisons, paire);
+                <div class="border rounded p-3 mb-3">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div>
+                            <div class="fw-semibold">@paire.Titre</div>
+                            <p class="text-muted small mb-0 mt-1">@paire.Description</p>
+                        </div>
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   role="switch"
+                                   checked="@active"
+                                   disabled="@_busy"
+                                   @onchange="async _ => await ToggleLiaisonAsync(paire, !active)" />
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </section>
 }
 else if (_tab == "supervision")
 {
@@ -307,15 +402,21 @@ else if (_tab == "supervision")
     [Inject] private SerilogFileTail LogTail { get; set; } = default!;
     [Inject] private HealthAlertState Alerts { get; set; } = default!;
     [Inject] private ILogger<Admin> Logger { get; set; } = default!;
+    [Inject] private LiaisonModulesService Liaisons { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     private static readonly HashSet<string> KnownTabs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "modules", "finance", "travail", "course", "utilisateurs", "systeme", "supervision"
+        "modules", "finance", "travail", "course", "stock", "liaisons", "parametrage", "utilisateurs", "systeme", "supervision"
     };
 
     private string _tab = "modules";
     private ISet<string> _activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private ISet<string> _keysAvecLiaison = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private List<LiaisonModules> _liaisons = [];
+    private IReadOnlyList<LiaisonModulesService.PairDefinition> _pairesAdjacentes = [];
+    private List<LiaisonModulesService.PairDefinition> _pairesVisibles = [];
+    private bool _showLiaisonsTab;
     private List<UserRow> _users = [];
     private bool _busy;
     private bool _dbOk;
@@ -334,6 +435,9 @@ else if (_tab == "supervision")
         "finance" => "Finance",
         "travail" => "Travail",
         "course" => "Courses",
+        "stock" => "Stock",
+        "liaisons" => "Liaisons",
+        "parametrage" => "Paramétrage",
         "systeme" => "Système",
         "supervision" => "Supervision",
         _ => "Modules"
@@ -375,6 +479,18 @@ else if (_tab == "supervision")
             return;
         }
 
+        if (requested == "stock" && !_activeKeys.Contains(StockModule.ModuleKey))
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
+        if (requested == "liaisons" && !_showLiaisonsTab)
+        {
+            Navigation.NavigateTo("/admin/modules", replace: true);
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(Section)
             && !(requested == "travail" && Section.Equals("soldes-conges", StringComparison.OrdinalIgnoreCase)))
         {
@@ -398,6 +514,10 @@ else if (_tab == "supervision")
         else if (_tab is "systeme")
         {
             await CheckDatabaseAsync();
+        }
+        else if (_tab is "liaisons" or "modules")
+        {
+            await TryLoadLiaisonsAsync();
         }
     }
 
@@ -449,6 +569,55 @@ else if (_tab == "supervision")
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         await using var db = await DbFactory.CreateDbContextAsync(cts.Token);
         _activeKeys = await ModuleManager.GetActiveModuleKeysAsync(db, cts.Token);
+        _pairesAdjacentes = LiaisonModulesService.BuildAdjacentPairs(ModuleManager.AllModules);
+        _pairesVisibles = _pairesAdjacentes
+            .Where(p => LiaisonModulesService.PairVisible(p, _activeKeys))
+            .ToList();
+        _showLiaisonsTab = _pairesVisibles.Count > 0;
+        _keysAvecLiaison = await Liaisons.GetModuleKeysAvecLiaisonActiveAsync(db, cts.Token);
+        _liaisons = await Liaisons.ListerAsync(db, cts.Token);
+    }
+
+    private async Task TryLoadLiaisonsAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _liaisons = await Liaisons.ListerAsync(db);
+            _keysAvecLiaison = await Liaisons.GetModuleKeysAvecLiaisonActiveAsync(db);
+            _pairesAdjacentes = LiaisonModulesService.BuildAdjacentPairs(ModuleManager.AllModules);
+            _pairesVisibles = _pairesAdjacentes
+                .Where(p => LiaisonModulesService.PairVisible(p, _activeKeys))
+                .ToList();
+            _showLiaisonsTab = _pairesVisibles.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Impossible de charger les liaisons sur /admin");
+        }
+    }
+
+    private async Task ToggleLiaisonAsync(LiaisonModulesService.PairDefinition paire, bool estActive)
+    {
+        _busy = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await Liaisons.SetActiveAsync(db, paire.ModuleA, paire.ModuleB, estActive);
+            await TryLoadLiaisonsAsync();
+            ShowToast(estActive
+                ? $"Liaison « {paire.Titre} » activée (configuration uniquement)."
+                : $"Liaison « {paire.Titre} » désactivée.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Échec de bascule de la liaison {ModuleA}/{ModuleB}", paire.ModuleA, paire.ModuleB);
+            ShowToast($"Impossible de mettre à jour la liaison : {ex.Message}", success: false);
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task LoadUsersAsync()
@@ -496,6 +665,7 @@ else if (_tab == "supervision")
             await using var db = await DbFactory.CreateDbContextAsync();
             await ModuleManager.SetModuleActiveAsync(db, module.Key, isActive);
             await ReloadModulesAsync();
+            await TryLoadLiaisonsAsync();
             Logger.LogInformation(
                 "Module {ModuleKey} {ModuleAction} par un administrateur",
                 module.Key,

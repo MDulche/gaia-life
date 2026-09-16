@@ -1,4 +1,4 @@
-﻿@implements IDisposable
+@implements IDisposable
 @* Sidebar : section Modules (actifs) + Administration + bascule thème en bas. Ne plante pas si MariaDB est coupée. *@
 @inject ModuleManager ModuleManager
 @inject IDbContextFactory<AppDbContext> DbFactory
@@ -141,6 +141,7 @@
         "bi-cash-coin" => "bi-cash-coin-nav-menu",
         "bi-briefcase" => "bi-briefcase-nav-menu",
         "bi-cart" => "bi-cart-nav-menu",
+        "bi-box-seam" => "bi-box-seam-nav-menu",
         _ => "bi-list-nested-nav-menu"
     };
 

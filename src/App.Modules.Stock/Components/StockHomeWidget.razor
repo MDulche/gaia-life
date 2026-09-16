@@ -1,0 +1,32 @@
+@* Widget accueil : nombre d'articles sous le seuil d'alerte. *@
+@inject StockService Stock
+
+<WidgetCard Title="Stock" Icon="bi-box-seam">
+    @if (_loading)
+    {
+        <p class="text-muted mb-0">Chargement…</p>
+    }
+    else if (_stockBas == 0)
+    {
+        <p class="widget-metric mb-1">0</p>
+        <p class="text-muted small mb-0">Aucun article en stock bas.</p>
+    }
+    else
+    {
+        <p class="widget-metric mb-2">@_stockBas</p>
+        <p class="small mb-0 text-warning-emphasis">
+            @(_stockBas == 1 ? "article en stock bas" : "articles en stock bas")
+        </p>
+    }
+</WidgetCard>
+
+@code {
+    private bool _loading = true;
+    private int _stockBas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _stockBas = await Stock.CompterStockBasAsync();
+        _loading = false;
+    }
+}

@@ -1,9 +1,10 @@
 @page "/course"
-@* Liste de courses : à acheter / historique, camembert du mois, ordre des magasins. *@
+@* Liste à gauche ; stats, jeu de données, parcours magasins (+ mouvements stock si liaison) à droite. *@
 @attribute [Authorize]
 @using System.Globalization
 @inject CourseService Course
 @inject IActiveModuleGuard ModuleGuard
+@inject IModuleLiaisonQuery Liaisons
 @inject NavigationManager Navigation
 
 <PageTitle>Courses</PageTitle>
@@ -23,7 +24,7 @@
     }
 
     <div class="course-dashboard">
-        <div class="course-dashboard-col">
+        <div class="course-dashboard-col course-dashboard-liste">
             <WidgetCard Title="@(_historique ? "Articles achetés" : "Liste de courses")" Icon="bi-cart">
                 @if (!_historique)
                 {
@@ -91,7 +92,7 @@
                             @if (_lignes.Count == 0)
                             {
                                 <tr>
-                                    <td colspan="@(_historique ? 5 : 5)" class="text-muted text-center">
+                                    <td colspan="5" class="text-muted text-center">
                                         @(_historique ? "Aucun article acheté pour le moment." : "Aucun article à acheter.")
                                     </td>
                                 </tr>
@@ -131,10 +132,19 @@
             </WidgetCard>
         </div>
 
-        <div class="course-dashboard-col">
+        <div class="course-dashboard-col course-dashboard-side">
             <WidgetCard Title="Achats du mois">
                 <CoursePieChart Slices="_repartition" EmptyText="Aucun achat enregistré ce mois-ci." />
             </WidgetCard>
+
+            <div class="d-grid">
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        disabled
+                        title="Bientôt disponible">
+                    Jeu de données
+                </button>
+            </div>
 
             <WidgetCard Title="Ordre des magasins à suivre">
                 @if (_parcours.Count == 0)
@@ -164,14 +174,24 @@
                     </div>
                 }
             </WidgetCard>
+
+            @if (_liaisonCourseStock)
+            {
+                <WidgetCard Title="Mouvements de stock" Icon="bi-box-seam">
+                    <p class="text-muted mb-0">Aucun mouvement pour le moment.</p>
+                </WidgetCard>
+            }
         </div>
     </div>
 }
 
 @code {
+    private const string StockModuleKey = "stock";
+
     private bool _ready;
     private bool _busy;
     private bool _historique;
+    private bool _liaisonCourseStock;
     private string? _error;
     private List<ArticleCourse> _lignes = [];
     private List<Categorie> _categories = [];
@@ -200,6 +220,7 @@
         _lignes = _historique
             ? await Course.ListerArticlesAchetes()
             : await Course.ListerArticlesAEnAcheter();
+        _liaisonCourseStock = await Liaisons.IsLiaisonActiveAsync(CourseModule.ModuleKey, StockModuleKey);
 
         if (_nouveau.CategorieId == 0 && _categories.Count > 0)
         {

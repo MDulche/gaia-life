@@ -5,6 +5,7 @@ using App.Core.Identity;
 using App.Core.Modules;
 using App.Modules.Course;
 using App.Modules.Finance;
+using App.Modules.Stock;
 using App.Modules.Travail;
 using App.Shared.Modules;
 using HealthChecks.UI.Client;
@@ -148,11 +149,16 @@ builder.Services.AddRazorComponents()
 builder.Services.AddScoped<IActiveModuleGuard, ActiveModuleGuard>();
 
 var moduleManager = new ModuleManager();
-moduleManager.Register(new FinanceModule());
 moduleManager.Register(new TravailModule());
+moduleManager.Register(new FinanceModule());
 moduleManager.Register(new CourseModule());
+moduleManager.Register(new StockModule());
 moduleManager.ConfigureAllServices(builder.Services);
 builder.Services.AddSingleton(moduleManager);
+builder.Services.AddScoped<LiaisonModulesService>();
+builder.Services.AddScoped<IModuleLiaisonQuery, ModuleLiaisonQuery>();
+builder.Services.AddScoped<AppParametrageService>();
+builder.Services.AddScoped<IAppParametrageQuery>(sp => sp.GetRequiredService<AppParametrageService>());
 
 var app = builder.Build();
 
@@ -232,7 +238,8 @@ app.MapRazorComponents<global::App.Core.Components.App>()
         typeof(global::App.Shared.AssemblyMarker).Assembly,
         typeof(FinanceModule).Assembly,
         typeof(TravailModule).Assembly,
-        typeof(CourseModule).Assembly);
+        typeof(CourseModule).Assembly,
+        typeof(StockModule).Assembly);
 
 try
 {
@@ -240,6 +247,7 @@ try
     await FinanceModule.MigrateAsync(app.Services);
     await TravailModule.MigrateAsync(app.Services);
     await CourseModule.MigrateAsync(app.Services);
+    await StockModule.MigrateAsync(app.Services);
     await app.RunAsync();
 }
 finally

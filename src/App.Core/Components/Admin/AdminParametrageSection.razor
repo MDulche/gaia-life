@@ -1,0 +1,168 @@
+@* Mode local / serveur : dossier PJ ou URL distante. *@
+@inject AppParametrageService Parametrage
+@using global::App.Shared.Modules
+
+<section>
+    <h2 class="h5 mb-3">Paramétrage</h2>
+    <p class="text-muted">Stockage des pièces jointes et fichiers applicatifs.</p>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+    @if (!string.IsNullOrEmpty(_toast))
+    {
+        <div class="alert alert-success" role="status">@_toast</div>
+    }
+    @if (!string.IsNullOrEmpty(_verifyToast))
+    {
+        <div class="alert alert-info" role="status">@_verifyToast</div>
+    }
+
+    <EditForm Model="_form" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+
+        <div class="mb-3">
+            <span class="form-label d-block">Mode</span>
+            <div class="btn-group" role="group" aria-label="Mode de stockage">
+                <input type="radio"
+                       class="btn-check"
+                       name="mode-stockage"
+                       id="mode-local"
+                       autocomplete="off"
+                       checked="@(_form.Mode == ModeStockage.Local)"
+                       @onchange="() => SetMode(ModeStockage.Local)" />
+                <label class="btn btn-outline-primary" for="mode-local">Local</label>
+
+                <input type="radio"
+                       class="btn-check"
+                       name="mode-stockage"
+                       id="mode-serveur"
+                       autocomplete="off"
+                       checked="@(_form.Mode == ModeStockage.Serveur)"
+                       @onchange="() => SetMode(ModeStockage.Serveur)" />
+                <label class="btn btn-outline-primary" for="mode-serveur">Serveur</label>
+            </div>
+        </div>
+
+        @if (_form.Mode == ModeStockage.Local)
+        {
+            <div class="alert alert-warning" role="status">
+                Les futures intégrations IA ne seront pas disponibles en mode local.
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="dossier-local">Dossier de stockage</label>
+                <div class="input-group">
+                    <InputText id="dossier-local"
+                               class="form-control"
+                               @bind-Value="_form.DossierLocal"
+                               placeholder="Ex. C:\Gaia\stockage ou /data/stockage" />
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            disabled="@_busy"
+                            @onclick="VerifierDossierAsync">
+                        Vérifier / créer
+                    </button>
+                </div>
+                <div class="form-text">Chemin sur la machine qui héberge l'application (PJ, exports, etc.).</div>
+                <ValidationMessage For="() => _form.DossierLocal" />
+            </div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <label class="form-label" for="url-serveur">URL serveur</label>
+                <InputText id="url-serveur"
+                           class="form-control"
+                           @bind-Value="_form.UrlServeur"
+                           placeholder="https://exemple.tld/stockage" />
+                <div class="form-text">Base URL du stockage distant. Les intégrations IA pourront s'appuyer sur ce mode.</div>
+                <ValidationMessage For="() => _form.UrlServeur" />
+            </div>
+        }
+
+        <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>
+    </EditForm>
+</section>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private string? _toast;
+    private string? _verifyToast;
+    private ParametrageForm _form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var row = await Parametrage.GetAsync();
+        _form = new ParametrageForm
+        {
+            Mode = row.Mode,
+            DossierLocal = row.DossierLocal,
+            UrlServeur = row.UrlServeur
+        };
+    }
+
+    private void SetMode(ModeStockage mode)
+    {
+        _form.Mode = mode;
+        _error = null;
+        _toast = null;
+        _verifyToast = null;
+    }
+
+    private async Task VerifierDossierAsync()
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        _verifyToast = null;
+        try
+        {
+            var full = await Task.Run(() => AppParametrageService.VerifierDossierLocal(_form.DossierLocal));
+            _form.DossierLocal = full;
+            _verifyToast = $"Dossier prêt : {full}";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        _toast = null;
+        _verifyToast = null;
+        try
+        {
+            await Parametrage.SaveAsync(_form.Mode, _form.DossierLocal, _form.UrlServeur);
+            _toast = "Paramétrage enregistré.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class ParametrageForm
+    {
+        public ModeStockage Mode { get; set; } = ModeStockage.Local;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(512, ErrorMessage = "Le chemin ne peut pas dépasser 512 caractères.")]
+        public string? DossierLocal { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(512, ErrorMessage = "L'URL ne peut pas dépasser 512 caractères.")]
+        public string? UrlServeur { get; set; }
+    }
+}
