@@ -18,4 +18,6 @@ public class Employeur
     public ICollection<Conge> Conges { get; set; } = new List<Conge>();
 
     public ICollection<SoldeConges> SoldesConges { get; set; } = new List<SoldeConges>();
+
+    public ICollection<HeureSupplementaire> HeuresSupplementaires { get; set; } = new List<HeureSupplementaire>();
 }

@@ -10,7 +10,12 @@ internal static class TravailFormat
 
     public static string Euro(decimal value) => $"{value.ToString("N2", French)} €";
 
+    public static string Heures(decimal heures) => $"{heures.ToString("0.##", French)} h";
+
     public static string Mois(DateTime mois) => mois.ToString("MMMM yyyy", French);
+
+    public static string MoisCourt(DateTime mois) => mois.ToString("MMM", French).ToUpperInvariant();
+
 
     public static string Jours(decimal jours) => $"{jours.ToString("0.##", French)} j";
 

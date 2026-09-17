@@ -129,6 +129,60 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<decimal> TotalHeuresSupMoisEnCours(int employeurId, CancellationToken cancellationToken = default)
+    {
+        var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var fin = debut.AddMonths(1);
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var total = await db.HeuresSupplementaires.AsNoTracking()
+            .Where(h => h.EmployeurId == employeurId && h.Date >= debut && h.Date < fin)
+            .SumAsync(h => h.DureeCalculee, cancellationToken);
+        return decimal.Round(total, 2);
+    }
+
+    public async Task<List<HeureSupplementaire>> ListerHeuresSup(
+        int employeurId,
+        DateTime? debut = null,
+        DateTime? fin = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var query = db.HeuresSupplementaires.AsNoTracking()
+            .Where(h => h.EmployeurId == employeurId);
+
+        if (debut is not null)
+        {
+            var d = debut.Value.Date;
+            query = query.Where(h => h.Date >= d);
+        }
+
+        if (fin is not null)
+        {
+            var f = fin.Value.Date.AddDays(1);
+            query = query.Where(h => h.Date < f);
+        }
+
+        return await query
+            .OrderByDescending(h => h.Date)
+            .ThenByDescending(h => h.HeureDebut)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AjouterHeureSup(HeureSupplementaire heure, CancellationToken cancellationToken = default)
+    {
+        ValiderHeureSup(heure);
+        heure.Date = heure.Date.Date;
+        heure.DureeCalculee = decimal.Round(
+            (decimal)(heure.HeureFin - heure.HeureDebut).TotalHours,
+            2);
+        heure.Contexte = heure.Contexte.Trim();
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureEmployeurExistsAsync(db, heure.EmployeurId, cancellationToken);
+        db.HeuresSupplementaires.Add(heure);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<List<Conge>> ListerConges(
         int employeurId,
         StatutConge? filtreStatut = null,
@@ -514,6 +568,24 @@ public sealed class TravailService
         if (fiche.DateEmission == default)
         {
             fiche.DateEmission = DateTime.Now;
+        }
+    }
+
+    private static void ValiderHeureSup(HeureSupplementaire heure)
+    {
+        if (heure.EmployeurId <= 0)
+        {
+            throw new InvalidOperationException("L'employeur est obligatoire.");
+        }
+
+        if (string.IsNullOrWhiteSpace(heure.Contexte))
+        {
+            throw new InvalidOperationException("Le contexte est obligatoire.");
+        }
+
+        if (heure.HeureFin <= heure.HeureDebut)
+        {
+            throw new InvalidOperationException("L'heure de fin doit être postérieure à l'heure de début (même journée).");
         }
     }
 

@@ -1,0 +1,60 @@
+@* Courbe / points du salaire net sur 12 mois (mois sans fiche = pas de point). *@
+
+@if (Points.Count == 0)
+{
+    <p class="text-muted mb-0">@EmptyText</p>
+}
+else
+{
+    var max = Points.Max(p => p.SalaireNet);
+    if (max <= 0) { max = 1; }
+    var debut = DebutPeriode;
+    var fin = debut.AddMonths(11);
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string XOf(DateTime mois)
+    {
+        var offset = (mois.Year - debut.Year) * 12 + (mois.Month - debut.Month);
+        return (30 + offset / 11d * 360d).ToString("0.##", inv);
+    }
+    string YOf(decimal net) =>
+        (170 - (double)(net / max) * 140d).ToString("0.##", inv);
+    var ordered = Points.OrderBy(p => p.Mois).ToList();
+    var poly = string.Join(" ", ordered.Select(p => $"{XOf(p.Mois)},{YOf(p.SalaireNet)}"));
+    <div class="table-responsive">
+        <svg class="travail-salaire-chart" viewBox="0 0 420 200" role="img" aria-label="Évolution du salaire net sur 12 mois">
+            <polyline fill="none"
+                      stroke="var(--bs-primary)"
+                      stroke-width="2.5"
+                      stroke-linejoin="round"
+                      stroke-linecap="round"
+                      points="@poly"></polyline>
+            @foreach (var p in ordered)
+            {
+                <circle cx="@XOf(p.Mois)"
+                        cy="@YOf(p.SalaireNet)"
+                        r="4.5"
+                        fill="var(--bs-primary)"
+                        stroke="var(--bs-body-bg)"
+                        stroke-width="1.5">
+                    <title>@TravailFormat.Mois(p.Mois) — @TravailFormat.Euro(p.SalaireNet)</title>
+                </circle>
+            }
+            <text x="30" y="195" class="travail-chart-label">@TravailFormat.MoisCourt(debut)</text>
+            <text x="390" y="195" text-anchor="end" class="travail-chart-label">@TravailFormat.MoisCourt(fin)</text>
+        </svg>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<SalaireNetPoint> Points { get; set; } = [];
+
+    [Parameter]
+    public DateTime DebutPeriode { get; set; } =
+        new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-11);
+
+    [Parameter]
+    public string EmptyText { get; set; } = "Aucune fiche de paie sur 12 mois.";
+
+    public sealed record SalaireNetPoint(DateTime Mois, decimal SalaireNet);
+}

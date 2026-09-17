@@ -5,7 +5,7 @@ namespace App.Modules.Travail.Data;
 
 /// <summary>
 /// Contexte métier Travail. Factory uniquement (aucun lien Identity).
-/// Relations 1-N : Employeur → FichePaies, Conges, SoldeConges.
+/// Relations 1-N : Employeur → FichePaies, Conges, SoldeConges, HeuresSupplementaires.
 /// </summary>
 public class TravailDbContext : DbContext
 {
@@ -24,6 +24,8 @@ public class TravailDbContext : DbContext
 
     public DbSet<CouleurTypeConge> CouleursTypes => Set<CouleurTypeConge>();
 
+    public DbSet<HeureSupplementaire> HeuresSupplementaires => Set<HeureSupplementaire>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Employeur>(entity =>
@@ -40,6 +42,10 @@ public class TravailDbContext : DbContext
                 .HasForeignKey(e => e.EmployeurId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(e => e.SoldesConges)
+                .WithOne(e => e.Employeur)
+                .HasForeignKey(e => e.EmployeurId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(e => e.HeuresSupplementaires)
                 .WithOne(e => e.Employeur)
                 .HasForeignKey(e => e.EmployeurId)
                 .OnDelete(DeleteBehavior.Cascade);
@@ -85,6 +91,14 @@ public class TravailDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(16);
             entity.HasIndex(e => e.Type).IsUnique();
+        });
+
+        modelBuilder.Entity<HeureSupplementaire>(entity =>
+        {
+            entity.ToTable("HeuresSupplementaires");
+            entity.Property(e => e.Contexte).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.DureeCalculee).HasPrecision(8, 2);
+            entity.HasIndex(e => new { e.EmployeurId, e.Date });
         });
     }
 }

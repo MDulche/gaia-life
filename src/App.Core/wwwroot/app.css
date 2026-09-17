@@ -618,6 +618,24 @@ hr {
     min-height: 0;
 }
 
+.travail-pair {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+
+.travail-salaire-chart {
+    width: 100%;
+    max-width: 36rem;
+    height: auto;
+    display: block;
+}
+
+.travail-chart-label {
+    fill: var(--bs-secondary-color);
+    font-size: 0.7rem;
+}
+
 @media (min-width: 768px) {
     .finance-dashboard {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -635,6 +653,10 @@ hr {
 
     .travail-dashboard {
         grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
+    }
+
+    .travail-pair {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
