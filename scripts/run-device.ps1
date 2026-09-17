@@ -15,6 +15,7 @@ param(
     [string]$WifiPairPort = '',
     [string]$WifiPairCode = '',
     [string]$WifiConnectPort = '',
+    [switch]$WifiViaUsb,
     [switch]$SkipRun,
     [switch]$NoLogcat,
     [int]$LogcatSeconds = 0
@@ -246,6 +247,57 @@ function Resolve-PhysicalDeviceSerial {
     return $ready[0].Serial
 }
 
+function Invoke-Adb {
+    param(
+        [string]$Adb,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$AdbArgs
+    )
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Adb @AdbArgs 2>&1 | ForEach-Object { "$_" }
+        return [pscustomobject]@{
+            ExitCode = $LASTEXITCODE
+            Text     = (($out -join ' ').Trim())
+            Lines    = @($out)
+        }
+    }
+    finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
+
+function Find-WifiConnectPortFromMdns {
+    param(
+        [string]$Adb,
+        [string]$Ip
+    )
+
+    $mdns = Invoke-Adb -Adb $Adb -AdbArgs @('mdns', 'services')
+    Write-Log ("adb mdns services: {0}" -f $mdns.Text)
+    foreach ($line in $mdns.Lines) {
+        $t = "$line".Trim()
+        # Ex: adb-xxxx  _adb-tls-connect._tcp  172.16.101.247:45123
+        if ($t -match [regex]::Escape($Ip) + ':(?<port>\d+)') {
+            return $Matches['port']
+        }
+        if ($t -match '(?i)_adb.*connect|_adb\._tcp' -and $t -match ':(?<port>\d+)\s*$') {
+            if ($t -match [regex]::Escape($Ip)) {
+                return $Matches['port']
+            }
+        }
+    }
+    return $null
+}
+
+function Test-AdbConnectOk {
+    param([string]$Text)
+    return ($Text -match '(?i)connected to|already connected') `
+        -and ($Text -notmatch '(?i)failed to connect|unable to connect|cannot connect|connection refused|no route|10061|refus')
+}
+
 function Connect-WifiAdb {
     param(
         [string]$Adb,
@@ -264,47 +316,216 @@ function Connect-WifiAdb {
         return $null
     }
 
-    Write-Step 'Connexion ADB Wi-Fi (pairing + connect)...'
+    Write-Step 'Connexion ADB Wi-Fi...'
 
-    if (-not $PairPort -or -not $PairCode) {
-        Stop-WithError 'Wi-Fi : IP renseignee mais port de pairing ou code manquant. Sur le telephone : Debogage sans fil > Associer avec un code.'
-    }
-    if (-not $ConnectPort) {
-        Stop-WithError 'Wi-Fi : port de connexion manquant (affiche sous Debogage sans fil, souvent different du port de pairing).'
-    }
     if ($Ip -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
         Stop-WithError ("IP invalide : '{0}' (attendu ex. 192.168.1.42)." -f $Ip)
     }
-    if ($PairPort -notmatch '^\d+$' -or $ConnectPort -notmatch '^\d+$') {
-        Stop-WithError 'Ports de pairing / connexion invalides (entiers uniquement).'
+
+    $doPair = [bool]$PairCode
+    if ($doPair) {
+        if (-not $PairPort) {
+            Stop-WithError 'Code pairing fourni mais port de pairing manquant (fenetre "Associer un appareil").'
+        }
+        if ($PairPort -notmatch '^\d+$') {
+            Stop-WithError 'Port de pairing invalide (entier uniquement).'
+        }
+        if ($ConnectPort -and $PairPort -eq $ConnectPort) {
+            Write-Host 'Attention : port pairing = port connexion. Sur Android 11+, ils sont souvent DIFFERENTS.' -ForegroundColor Yellow
+        }
+        if ($PairCode -notmatch '^\d{6}$') {
+            Write-Host 'Avertissement : le code pairing Android fait en general 6 chiffres.' -ForegroundColor Yellow
+        }
     }
-    if ($PairCode -notmatch '^\d{6}$') {
-        Write-Host 'Avertissement : le code pairing Android fait en general 6 chiffres.' -ForegroundColor Yellow
+    elseif (-not $ConnectPort) {
+        Stop-WithError 'Wi-Fi : port de connexion manquant (ecran principal Debogage sans fil).'
     }
 
-    $pairTarget = '{0}:{1}' -f $Ip, $PairPort
-    $connectTarget = '{0}:{1}' -f $Ip, $ConnectPort
-
-    Write-Host ("  pair  {0}" -f $pairTarget) -ForegroundColor DarkGray
-    Write-Log ("adb pair {0} ******" -f $pairTarget)
-    $pairOut = & $Adb pair $pairTarget $PairCode 2>&1 | ForEach-Object { "$_" }
-    $pairText = ($pairOut -join ' ').Trim()
-    Write-Log ("adb pair out: {0}" -f $pairText)
-    if ($LASTEXITCODE -ne 0 -and $pairText -notmatch 'Successfully paired') {
-        Stop-WithError ("Echec adb pair ({0}). Verifiez IP/port/code (fenetre d association ouverte sur le telephone). Detail: {1}" -f $LASTEXITCODE, $pairText)
+    if ($ConnectPort -and $ConnectPort -notmatch '^\d+$') {
+        Stop-WithError 'Port de connexion invalide (entier uniquement).'
     }
-    Write-Ok ("Pairing OK : {0}" -f $pairTarget)
 
-    Write-Host ("  connect {0}" -f $connectTarget) -ForegroundColor DarkGray
-    Write-Log ("adb connect {0}" -f $connectTarget)
-    $connOut = & $Adb connect $connectTarget 2>&1 | ForEach-Object { "$_" }
-    $connText = ($connOut -join ' ').Trim()
-    Write-Log ("adb connect out: {0}" -f $connText)
-    if ($LASTEXITCODE -ne 0 -and $connText -notmatch 'connected to') {
-        Stop-WithError ("Echec adb connect ({0}). Detail: {1}" -f $LASTEXITCODE, $connText)
+    if ($doPair) {
+        $pairTarget = '{0}:{1}' -f $Ip, $PairPort
+        Write-Host ("  pair  {0}" -f $pairTarget) -ForegroundColor DarkGray
+        Write-Log ("adb pair {0} ******" -f $pairTarget)
+        $pair = Invoke-Adb -Adb $Adb -AdbArgs @('pair', $pairTarget, $PairCode)
+        Write-Log ("adb pair out: {0}" -f $pair.Text)
+        $pairOk = ($pair.Text -match 'Successfully paired') -or ($pair.ExitCode -eq 0 -and $pair.Text -notmatch '(?i)fail|error|unable')
+        if (-not $pairOk) {
+            Stop-WithError ("Echec adb pair. Fenetre d association ouverte ? Detail: {0}" -f $pair.Text)
+        }
+        Write-Ok ("Pairing OK : {0}" -f $pairTarget)
+
+        # Apres pairing, le port de connexion affiche AVANT est souvent obsolete.
+        Start-Sleep -Seconds 1
+        $discovered = Find-WifiConnectPortFromMdns -Adb $Adb -Ip $Ip
+        if ($discovered) {
+            Write-Ok ("Port connexion detecte via mDNS : {0}" -f $discovered)
+            $ConnectPort = $discovered
+        }
+        else {
+            Write-Host ''
+            Write-Host 'Pairing OK. Sur le telephone, revenez a l ecran PRINCIPAL' -ForegroundColor Cyan
+            Write-Host '"Debogage sans fil" et recopiez le port ACTUEL (IP:port en haut).' -ForegroundColor Cyan
+            Write-Host 'Ce port change souvent pendant / apres l association.' -ForegroundColor Cyan
+            $hint = if ($ConnectPort) { $ConnectPort } else { '' }
+            $prompt = if ($hint) {
+                "Port CONNEXION actuel [Entree = $hint] : "
+            } else {
+                'Port CONNEXION actuel : '
+            }
+            $fresh = Read-Host $prompt
+            $fresh = ($fresh -replace '\s', '').Trim()
+            if ($fresh) { $ConnectPort = $fresh }
+            if (-not $ConnectPort -or $ConnectPort -notmatch '^\d+$') {
+                Stop-WithError 'Port de connexion requis apres pairing (ecran principal Debogage sans fil).'
+            }
+        }
     }
-    Write-Ok ("Connecte : {0}" -f $connectTarget)
+    else {
+        Write-Host '  (deja associe - pairing ignore)' -ForegroundColor DarkGray
+    }
+
+    $attemptPorts = @($ConnectPort)
+    $maxAttempts = 3
+    $lastConnText = ''
+    $connectTarget = $null
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $port = $attemptPorts[$attemptPorts.Count - 1]
+        $connectTarget = '{0}:{1}' -f $Ip, $port
+
+        Write-Log ("adb disconnect {0} (cleanup)" -f $connectTarget)
+        Invoke-Adb -Adb $Adb -AdbArgs @('disconnect', $connectTarget) | Out-Null
+
+        Write-Host ("  connect {0} (essai {1}/{2})" -f $connectTarget, $attempt, $maxAttempts) -ForegroundColor DarkGray
+        Write-Log ("adb connect {0}" -f $connectTarget)
+        $conn = Invoke-Adb -Adb $Adb -AdbArgs @('connect', $connectTarget)
+        $lastConnText = $conn.Text
+        Write-Log ("adb connect out: {0}" -f $conn.Text)
+
+        if (Test-AdbConnectOk -Text $conn.Text) {
+            break
+        }
+
+        if ($attempt -ge $maxAttempts) {
+            Write-Host ''
+            Write-Host 'Diagnostic (connexion refusee / 10061) :' -ForegroundColor Yellow
+            Write-Host '  - Apres pairing, le port connexion change : recopiez-le sur l ecran principal.' -ForegroundColor Yellow
+            Write-Host '  - Desactivez/reactivez Debogage sans fil, meme Wi-Fi (pas invite).' -ForegroundColor Yellow
+            Write-Host '  - Mode 1 (USB) ou mode 4 (USB puis Wi-Fi tcpip 5555) du .bat.' -ForegroundColor Yellow
+            try {
+                $tnc = Test-NetConnection -ComputerName $Ip -Port ([int]$port) -WarningAction SilentlyContinue
+                Write-Log ("Test-NetConnection {0}:{1} TcpTestSucceeded={2}" -f $Ip, $port, $tnc.TcpTestSucceeded)
+                if (-not $tnc.TcpTestSucceeded) {
+                    Write-Host ("  - Test TCP {0}:{1} = FERME." -f $Ip, $port) -ForegroundColor Yellow
+                }
+            }
+            catch {
+                Write-Log ("Test-NetConnection failed: {0}" -f $_)
+            }
+            Stop-WithError ("Echec adb connect vers {0}. Detail: {1}" -f $connectTarget, $lastConnText)
+        }
+
+        Write-Host ''
+        Write-Host ("Echec connect sur le port {0}. Recopiez le port ACTUEL (ecran principal)." -f $port) -ForegroundColor Yellow
+        $retryPort = Read-Host 'Nouveau port CONNEXION (ou vide pour abandonner)'
+        $retryPort = ($retryPort -replace '\s', '').Trim()
+        if (-not $retryPort -or $retryPort -notmatch '^\d+$') {
+            Stop-WithError ("Echec adb connect vers {0}. Detail: {1}" -f $connectTarget, $lastConnText)
+        }
+        $attemptPorts += $retryPort
+    }
+
+    # Attendre le passage offline -> device
+    $ready = $false
+    for ($i = 0; $i -lt 12; $i++) {
+        Start-Sleep -Milliseconds 500
+        $rows = @(Get-AdbDeviceRows -Adb $Adb)
+        $hit = @($rows | Where-Object { $_.Serial -eq $connectTarget })
+        if ($hit.Count -gt 0 -and $hit[0].Status -eq 'device') {
+            $ready = $true
+            break
+        }
+        if ($i -eq 3 -or $i -eq 7) {
+            Write-Log ("retry adb connect {0}" -f $connectTarget)
+            Invoke-Adb -Adb $Adb -AdbArgs @('connect', $connectTarget) | Out-Null
+        }
+    }
+
+    if (-not $ready) {
+        $rows = @(Get-AdbDeviceRows -Adb $Adb)
+        $hit = @($rows | Where-Object { $_.Serial -eq $connectTarget })
+        $st = if ($hit.Count -gt 0) { $hit[0].Status } else { 'absent' }
+        Stop-WithError ("Apres connect, appareil '{0}' statut '{1}' (attendu: device). Verifiez Debogage sans fil." -f $connectTarget, $st)
+    }
+
+    Write-Ok ("Connecte (device) : {0}" -f $connectTarget)
+    return $connectTarget
+}
+
+function Connect-WifiViaUsbTcpip {
+    param(
+        [string]$Adb,
+        [string]$Ip,
+        [int]$TcpipPort = 5555
+    )
+
+    $Ip = ($Ip -replace '\s', '').Trim()
+    if ($Ip -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
+        Stop-WithError ("IP invalide : '{0}'." -f $Ip)
+    }
+
+    Write-Step 'Mode USB -> Wi-Fi (adb tcpip)...'
+    Write-Host 'Branchez le cable USB, acceptez le debogage, puis attente detection...' -ForegroundColor DarkGray
+
+    $usbSerial = $null
+    for ($i = 0; $i -lt 30; $i++) {
+        $rows = @(Get-AdbDeviceRows -Adb $Adb)
+        $usb = @($rows | Where-Object { -not $_.IsEmulator -and $_.Status -eq 'device' -and $_.Serial -notmatch ':\d+$' })
+        if ($usb.Count -eq 1) {
+            $usbSerial = $usb[0].Serial
+            break
+        }
+        if ($usb.Count -gt 1) {
+            Stop-WithError ("Plusieurs telephones USB detectes. Gardez-en un seul branche, ou -DeviceSerial.")
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    if (-not $usbSerial) {
+        Stop-WithError 'Aucun telephone USB en statut device. Cable donnees + Debogage USB + autorisation a l ecran.'
+    }
+    Write-Ok ("USB detecte : {0}" -f $usbSerial)
+
+    Write-Log ("adb -s {0} tcpip {1}" -f $usbSerial, $TcpipPort)
+    $tcp = Invoke-Adb -Adb $Adb -AdbArgs @('-s', $usbSerial, 'tcpip', "$TcpipPort")
+    Write-Log ("adb tcpip out: {0}" -f $tcp.Text)
+    if ($tcp.Text -notmatch '(?i)restarting|listening' -and $tcp.ExitCode -ne 0) {
+        Stop-WithError ("Echec adb tcpip. Detail: {0}" -f $tcp.Text)
+    }
+    Write-Ok ("tcpip {0} active sur l appareil" -f $TcpipPort)
+    Start-Sleep -Seconds 2
+
+    $connectTarget = '{0}:{1}' -f $Ip, $TcpipPort
+    Write-Host ("Vous pouvez debrancher le cable. Connect Wi-Fi {0} ..." -f $connectTarget) -ForegroundColor DarkGray
+    $conn = Invoke-Adb -Adb $Adb -AdbArgs @('connect', $connectTarget)
+    Write-Log ("adb connect out: {0}" -f $conn.Text)
+    $connOk = ($conn.Text -match '(?i)connected to|already connected') `
+        -and ($conn.Text -notmatch '(?i)failed|cannot connect|refus|10061')
+    if (-not $connOk) {
+        Stop-WithError ("Echec connect apres tcpip vers {0}. Verifiez IP Wi-Fi du telephone. Detail: {1}" -f $connectTarget, $conn.Text)
+    }
+
     Start-Sleep -Seconds 1
+    $rows2 = @(Get-AdbDeviceRows -Adb $Adb)
+    $hit = @($rows2 | Where-Object { $_.Serial -eq $connectTarget -and $_.Status -eq 'device' })
+    if ($hit.Count -eq 0) {
+        Stop-WithError ("Connect OK mais statut pas device pour {0}. adb devices pour verifier." -f $connectTarget)
+    }
+
+    Write-Ok ("Wi-Fi via USB pret : {0}" -f $connectTarget)
     return $connectTarget
 }
 
@@ -416,7 +637,17 @@ if (-not $adb) {
 }
 Write-Ok ("adb : {0}" -f $adb)
 
-if ($WifiIp) {
+if ($WifiViaUsb) {
+    if (-not $WifiIp) {
+        Stop-WithError 'WifiViaUsb requiert -WifiIp (adresse Wi-Fi du telephone).'
+    }
+    $wifiSerial = Connect-WifiViaUsbTcpip -Adb $adb -Ip $WifiIp
+    if ($wifiSerial -and -not $DeviceSerial) {
+        $DeviceSerial = $wifiSerial
+        Write-Log ("DeviceSerial auto (USB->Wi-Fi)={0}" -f $DeviceSerial)
+    }
+}
+elseif ($WifiIp) {
     $wifiSerial = Connect-WifiAdb -Adb $adb -Ip $WifiIp -PairPort $WifiPairPort -PairCode $WifiPairCode -ConnectPort $WifiConnectPort
     if ($wifiSerial -and -not $DeviceSerial) {
         $DeviceSerial = $wifiSerial

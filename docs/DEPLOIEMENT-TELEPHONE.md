@@ -5,9 +5,13 @@ Guide pour installer et tester l’app MAUI Blazor Hybrid (`net9.0-android`) sur
 ## Lancement quotidien
 
 1. Double-cliquer sur [`scripts/lancer-telephone-gaialife.bat`](../scripts/lancer-telephone-gaialife.bat).
-2. Au démarrage, le `.bat` propose une **connexion ADB Wi‑Fi** :
-   - renseigner **IP**, **port de pairing**, **code** (6 chiffres), **port de connexion** (souvent différent du pairing — écran principal *Débogage sans fil*) ;
-   - laisser l’**IP vide** pour un téléphone déjà en USB / déjà `adb connect`.
+2. Au démarrage, le `.bat` propose un **menu** :
+   1. **USB** (recommandé si le câble est dispo)
+   2. **Wi‑Fi déjà associé** : IP + port de l’écran principal *Débogage sans fil* (recopier juste avant : le port change souvent)
+   3. **Wi‑Fi première association** : port connexion + port pairing + code
+   4. **USB puis Wi‑Fi** : une fois en USB, `adb tcpip 5555` puis `adb connect IP:5555` (souvent plus fiable que le pairing Android 11+)
+
+Erreur **10061 / connexion refusée** : rien n’écoute sur ce port (port périmé, débogage sans fil off, Wi‑Fi invité / isolation clients). Préférer le mode **1** ou **4**.
 3. Ensuite le script PowerShell :
    - vérifie qu’un appareil **physique** est en statut `device` (ignore les `emulator-*`) ;
    - refuse de démarrer si `unauthorized` / `offline` / aucun téléphone ;
@@ -24,14 +28,18 @@ Journaux locaux (non versionnés) : `scripts/.device-logs/`.
 | Option / variable | Effet |
 | --- | --- |
 | `-DeviceSerial SERIAL` ou `GAIALIFE_DEVICE_SERIAL` | Force le téléphone (obligatoire si plusieurs) |
-| `-WifiIp` / `-WifiPairPort` / `-WifiPairCode` / `-WifiConnectPort` | Pairing + `adb connect` avant déploiement |
+| `-WifiIp` + `-WifiConnectPort` | `adb connect` seul (PC déjà associé) |
+| `+ -WifiPairCode` + `-WifiPairPort` | Pairing puis connect (première fois) |
 | `-SkipRun` | Vérifie seulement la détection, sans build |
 | `-NoLogcat` | Déploie puis quitte sans suivre les logs |
 | `-LogcatSeconds 60` | Suit logcat 60 s puis quitte (sinon jusqu’à Ctrl+C) |
 
 ```powershell
 .\scripts\run-device.ps1 -DeviceSerial ABC123DEF -NoLogcat
-.\scripts\run-device.ps1 -WifiIp 192.168.1.42 -WifiPairPort 37123 -WifiPairCode 123456 -WifiConnectPort 5555
+# Deja associe :
+.\scripts\run-device.ps1 -WifiIp 172.16.101.247 -WifiConnectPort 41234
+# Premiere association :
+.\scripts\run-device.ps1 -WifiIp 172.16.101.247 -WifiConnectPort 41234 -WifiPairPort 39169 -WifiPairCode 085993
 adb devices -l
 ```
 
