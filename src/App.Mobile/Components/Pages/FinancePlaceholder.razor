@@ -1,0 +1,26 @@
+@page "/finance"
+@inject IActiveModuleGuard ModuleGuard
+
+<h1>Finances</h1>
+@if (_ready)
+{
+    @if (_active)
+    {
+        <p class="text-muted">Module non porté — en attente de l’agent Finance.</p>
+    }
+    else
+    {
+        <p class="text-muted">Module désactivé.</p>
+    }
+}
+
+@code {
+    private bool _ready;
+    private bool _active;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _active = await ModuleGuard.IsModuleActiveAsync("finance");
+        _ready = true;
+    }
+}

@@ -4,7 +4,7 @@ namespace App.Shared.Modules;
 
 /// <summary>
 /// Contrat d'un module métier (Finances, Travail, …).
-/// Enregistré dans <c>ModuleManager</c> au démarrage ; l'activation utilisateur est stockée en base.
+/// Enregistré dans <c>ModuleCatalog</c> au démarrage ; l'activation utilisateur est locale (mobile) ou archivée (web).
 /// </summary>
 public interface IAppModule
 {

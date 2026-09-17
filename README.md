@@ -1,28 +1,29 @@
 # Gaia-Life
 
-Application interne de gestion familiale (finance, travail et modules à venir).
+Application familiale **Android** (.NET MAUI Blazor Hybrid + SQLite embarqué).
+
+Le dashboard web Blazor Server a été **archivé** (jamais mis en prod) sous [`archive/web-dashboard/`](archive/web-dashboard/README.md).
 
 ## Prérequis
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) avec charge de travail **MAUI** (`dotnet workload install maui`)
+- Android SDK (via Visual Studio / workload MAUI)
 
-## Démarrage rapide (développement)
+## Solution active
 
 ```bash
-cp .env.dev.example .env.dev
-docker compose --env-file .env.dev -f docker-compose.dev.yml up
+dotnet build GaiaLife.sln
+dotnet build src/App.Mobile/App.Mobile.csproj -f net9.0-android
 ```
 
-Compte administrateur de développement (créé au premier démarrage si absent, **uniquement** si `ASPNETCORE_ENVIRONMENT=Development`) :
+Projets : `App.Mobile` (hôte), `App.Shared`, `App.Modules.Finance|Travail|Course|Stock`, tests.
 
-Les identifiants viennent de `.env.dev` (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`), jamais du code C#.
+## Contrat de migration
 
-## Production — secrets obligatoires
+Avant de porter un module, lire **[`docs/CONTRAT-MIGRATION-MOBILE.md`](docs/CONTRAT-MIGRATION-MOBILE.md)** (SQLite commun, bus async, `ArticleAcheteEvent`, mono-utilisateur, naming `*Async`).
 
-Avant `docker compose -f docker-compose.prod.yml` ou `scripts/deploy-prod.sh`, renseigner dans `.env.prod` (voir `.env.prod.example`) :
+## Archive web
 
-- `DB_PASSWORD` — obligatoire (pas de défaut)
-- `DB_ROOT_PASSWORD` — obligatoire (pas de défaut)
-
-La documentation de déploiement se trouve dans [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
+```bash
+dotnet build archive/web-dashboard/GaiaLife.WebArchive.sln
+```

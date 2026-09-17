@@ -69,7 +69,7 @@ public sealed class CourseService : ICourseParametresQuery
                 article.Id,
                 article.ArticleStockId,
                 article.PrixEstime,
-                article.Quantite), cancellationToken);
+                article.DateAchat ?? DateTime.Now), cancellationToken);
         }
     }
 

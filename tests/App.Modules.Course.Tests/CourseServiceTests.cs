@@ -92,11 +92,11 @@ public sealed class LiaisonCourseTests
         await using var scope = await LiaisonHarness.CreateAsync(liaisonStock: true, liaisonFinance: false);
         var stockId = await scope.SeedStockArticleAsync(quantite: 2m);
 
-        await scope.Bus.PublierAsync(new ArticleAcheteEvent(1, stockId, null, "3"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(1, stockId, null, DateTime.Today));
 
         await using var db = await scope.StockFactory.CreateDbContextAsync();
         var article = await db.Articles.SingleAsync(a => a.Id == stockId);
-        Assert.Equal(5m, article.Quantite);
+        Assert.Equal(3m, article.Quantite);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class LiaisonCourseTests
         await using var scope = await LiaisonHarness.CreateAsync(liaisonStock: true, liaisonFinance: false);
         var stockId = await scope.SeedStockArticleAsync(quantite: 2m);
 
-        await scope.Bus.PublierAsync(new ArticleAcheteEvent(1, null, null, "3"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(1, null, null, DateTime.Today));
 
         await using var db = await scope.StockFactory.CreateDbContextAsync();
         var article = await db.Articles.SingleAsync(a => a.Id == stockId);
@@ -119,7 +119,7 @@ public sealed class LiaisonCourseTests
         var compteId = await scope.SeedCompteAsync();
         scope.CompteCoursesParDefautId = compteId;
 
-        await scope.Bus.PublierAsync(new ArticleAcheteEvent(42, null, 12.5m, "1"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(42, null, 12.5m, DateTime.Today));
 
         await using var db = await scope.FinanceFactory.CreateDbContextAsync();
         var tx = await db.Transactions.SingleAsync();
@@ -136,7 +136,7 @@ public sealed class LiaisonCourseTests
         var compteId = await scope.SeedCompteAsync();
         scope.CompteCoursesParDefautId = compteId;
 
-        await scope.Bus.PublierAsync(new ArticleAcheteEvent(42, null, null, "1"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(42, null, null, DateTime.Today));
 
         await using var db = await scope.FinanceFactory.CreateDbContextAsync();
         Assert.Empty(await db.Transactions.ToListAsync());
@@ -154,7 +154,7 @@ public sealed class LiaisonCourseTests
             return Task.CompletedTask;
         });
 
-        await bus.PublierAsync(new ArticleAcheteEvent(1, null, null, "1"));
+        await bus.PublierAsync(new ArticleAcheteEvent(1, null, null, DateTime.Today));
 
         Assert.True(secondCalled);
     }

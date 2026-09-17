@@ -62,16 +62,11 @@ public sealed class ArticleAcheteStockSubscriber : IHostedService
             return;
         }
 
-        var delta = ParserDeltaQuantite(evenement.Quantite);
-        if (delta == 0)
-        {
-            return;
-        }
-
         var stock = scope.ServiceProvider.GetRequiredService<StockService>();
         try
         {
-            await stock.AjusterQuantiteAsync(stockId, delta, MotifsMouvementStock.AchatCourses);
+            // Quantité Course n'est plus sur l'événement (contrat mobile) : +1 par achat.
+            await stock.AjusterQuantiteAsync(stockId, 1m, MotifsMouvementStock.AchatCourses);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("introuvable", StringComparison.OrdinalIgnoreCase))
         {
@@ -79,6 +74,7 @@ public sealed class ArticleAcheteStockSubscriber : IHostedService
         }
     }
 
+    // Conservé pour tests / parsing éventuel de libellés quantité côté UI Course.
     internal static decimal ParserDeltaQuantite(string? quantite)
     {
         if (string.IsNullOrWhiteSpace(quantite))
