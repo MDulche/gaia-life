@@ -92,7 +92,7 @@ public sealed class LiaisonCourseTests
         await using var scope = await LiaisonHarness.CreateAsync(liaisonStock: true, liaisonFinance: false);
         var stockId = await scope.SeedStockArticleAsync(quantite: 2m);
 
-        scope.Bus.Publier(new ArticleAcheteEvent(1, stockId, null, "3"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(1, stockId, null, "3"));
 
         await using var db = await scope.StockFactory.CreateDbContextAsync();
         var article = await db.Articles.SingleAsync(a => a.Id == stockId);
@@ -105,7 +105,7 @@ public sealed class LiaisonCourseTests
         await using var scope = await LiaisonHarness.CreateAsync(liaisonStock: true, liaisonFinance: false);
         var stockId = await scope.SeedStockArticleAsync(quantite: 2m);
 
-        scope.Bus.Publier(new ArticleAcheteEvent(1, null, null, "3"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(1, null, null, "3"));
 
         await using var db = await scope.StockFactory.CreateDbContextAsync();
         var article = await db.Articles.SingleAsync(a => a.Id == stockId);
@@ -119,7 +119,7 @@ public sealed class LiaisonCourseTests
         var compteId = await scope.SeedCompteAsync();
         scope.CompteCoursesParDefautId = compteId;
 
-        scope.Bus.Publier(new ArticleAcheteEvent(42, null, 12.5m, "1"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(42, null, 12.5m, "1"));
 
         await using var db = await scope.FinanceFactory.CreateDbContextAsync();
         var tx = await db.Transactions.SingleAsync();
@@ -136,10 +136,27 @@ public sealed class LiaisonCourseTests
         var compteId = await scope.SeedCompteAsync();
         scope.CompteCoursesParDefautId = compteId;
 
-        scope.Bus.Publier(new ArticleAcheteEvent(42, null, null, "1"));
+        await scope.Bus.PublierAsync(new ArticleAcheteEvent(42, null, null, "1"));
 
         await using var db = await scope.FinanceFactory.CreateDbContextAsync();
         Assert.Empty(await db.Transactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PublierAsync_handler_en_echec_n_empeche_pas_les_suivants()
+    {
+        var bus = new EvenementBus();
+        var secondCalled = false;
+        bus.Abonner<ArticleAcheteEvent>(_ => throw new InvalidOperationException("boom"));
+        bus.Abonner<ArticleAcheteEvent>(_ =>
+        {
+            secondCalled = true;
+            return Task.CompletedTask;
+        });
+
+        await bus.PublierAsync(new ArticleAcheteEvent(1, null, null, "1"));
+
+        Assert.True(secondCalled);
     }
 }
 
@@ -148,16 +165,16 @@ file sealed class RecordingBus : IEvenementBus
     public List<object> Events { get; } = [];
     private readonly List<Delegate> _handlers = [];
 
-    public void Publier<T>(T evenement)
+    public async Task PublierAsync<T>(T evenement, CancellationToken cancellationToken = default)
     {
         Events.Add(evenement!);
-        foreach (var handler in _handlers.OfType<Action<T>>())
+        foreach (var handler in _handlers.OfType<Func<T, Task>>())
         {
-            handler(evenement);
+            await handler(evenement);
         }
     }
 
-    public void Abonner<T>(Action<T> handler) => _handlers.Add(handler);
+    public void Abonner<T>(Func<T, Task> handler) => _handlers.Add(handler);
 }
 
 file sealed class FakeLiaisonQuery(bool courseStock, bool courseFinance) : IModuleLiaisonQuery

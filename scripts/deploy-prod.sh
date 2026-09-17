@@ -9,6 +9,15 @@ if [ ! -f .env.prod ]; then
     exit 1
 fi
 
+# Secrets obligatoires (pas de fallback changeme en prod).
+# shellcheck disable=SC1091
+set -a
+# shellcheck source=/dev/null
+source .env.prod
+set +a
+: "${DB_PASSWORD:?DB_PASSWORD doit être défini dans .env.prod}"
+: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD doit être défini dans .env.prod}"
+
 COMPOSE=(docker compose --env-file .env.prod -f docker-compose.prod.yml)
 
 echo "==> git pull origin main"

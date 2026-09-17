@@ -113,6 +113,13 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/Account/Login";
     options.LogoutPath = "/Account/Logout";
     options.AccessDeniedPath = "/Account/AccessDenied";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    // Production : cookie uniquement sur HTTPS (TLS terminé sur nginx → X-Forwarded-Proto).
+    // Development : SameAsRequest pour faciliter http://localhost et le hot-reload.
+    options.Cookie.SecurePolicy = builder.Environment.IsProduction()
+        ? CookieSecurePolicy.Always
+        : CookieSecurePolicy.SameAsRequest;
 });
 
 // Toute page sans [AllowAnonymous] exige un utilisateur authentifié.
@@ -134,13 +141,26 @@ builder.Services.AddDataProtection()
     .SetApplicationName("GaiaLife")
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeys));
 
-// Nginx (réseau Docker) envoie X-Forwarded-Proto=https : Identity et HSTS
+// Nginx (réseau Docker « gaia ») envoie X-Forwarded-Proto=https : Identity et HSTS
 // voient une origine sûre alors que Kestrel n'écoute qu'en HTTP.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+    if (builder.Environment.IsDevelopment())
+    {
+        // Dev Docker : confiance large pour simplifier le proxy local (mkcert).
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+    else
+    {
+        // Production : ne faire confiance qu'au reverse proxy sur le bridge Docker.
+        // Subnet typique du réseau nommé « gaia » (driver bridge) : plage privée Docker 172.16.0.0/12.
+        // Pour restreindre : `docker network inspect <projet>_gaia` → IPAM.Config[].Subnet
+        // puis remplacer ci-dessous (ex. 172.18.0.0/16).
+        options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+            System.Net.IPAddress.Parse("172.16.0.0"), 12));
+    }
 });
 
 builder.Services.AddRazorComponents()

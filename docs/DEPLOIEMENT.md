@@ -32,9 +32,18 @@ cp .env.dev.example .env.dev
 cp .env.prod.example .env.prod
 ```
 
+**Production — variables obligatoires** (sans valeur par défaut faible ; Compose et `deploy-prod.sh` échouent si absentes) :
+
+| Variable | Rôle |
+| --- | --- |
+| `DB_PASSWORD` | Mot de passe utilisateur MariaDB `gaia` |
+| `DB_ROOT_PASSWORD` | Mot de passe root MariaDB |
+
+Optionnelles : `DB_NAME` (défaut `gaia_life`), `BACKUP_CRON_SCHEDULE`, `BACKUP_RETENTION_DAYS`, `TZ`, `GAIA_HOST`.
+
 ## Environnement de développement
 
-L'application tourne avec `dotnet watch` (hot-reload) et MariaDB 11.6. Les ports `8080` (app) et `3306` (MariaDB) sont exposés sur la machine hôte.
+L'application tourne avec `dotnet watch` (hot-reload) et MariaDB 11.6. Les ports `8080` (app) et `3306` (MariaDB) sont publiés **uniquement sur localhost** (`127.0.0.1`).
 
 ```bash
 cp .env.dev.example .env.dev

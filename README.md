@@ -18,4 +18,11 @@ Compte administrateur de développement (créé au premier démarrage si absent,
 
 Les identifiants viennent de `.env.dev` (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`), jamais du code C#.
 
+## Production — secrets obligatoires
+
+Avant `docker compose -f docker-compose.prod.yml` ou `scripts/deploy-prod.sh`, renseigner dans `.env.prod` (voir `.env.prod.example`) :
+
+- `DB_PASSWORD` — obligatoire (pas de défaut)
+- `DB_ROOT_PASSWORD` — obligatoire (pas de défaut)
+
 La documentation de déploiement se trouve dans [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).

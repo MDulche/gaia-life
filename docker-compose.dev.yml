@@ -19,7 +19,7 @@ services:
       - ./backups:/backups
     command: ["dotnet", "watch", "run", "--project", "src/App.Core/App.Core.csproj", "--urls", "http://0.0.0.0:8080"]
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     env_file:
       - .env.dev
     environment:
@@ -58,7 +58,7 @@ services:
       MARIADB_USER: gaia
       MARIADB_PASSWORD: ${DB_PASSWORD:-changeme}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./backups:/backups

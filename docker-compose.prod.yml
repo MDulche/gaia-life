@@ -1,3 +1,6 @@
+# Variables obligatoires via .env.prod (sans fallback faible) :
+#   DB_PASSWORD, DB_ROOT_PASSWORD
+# Optionnelles : DB_NAME (défaut gaia_life), BACKUP_*, TZ
 services:
   app-core:
     build:
@@ -9,7 +12,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://0.0.0.0:8080
-      ConnectionStrings__Default: Server=mariadb;Port=3306;Database=${DB_NAME:-gaia_life};User=gaia;Password=${DB_PASSWORD:-changeme}
+      ConnectionStrings__Default: Server=mariadb;Port=3306;Database=${DB_NAME:-gaia_life};User=gaia;Password=${DB_PASSWORD:?DB_PASSWORD doit être défini dans .env.prod}
       HealthChecks__LogsPath: /logs
       HealthChecks__BackupsPath: /backups
     ports:
@@ -35,10 +38,10 @@ services:
     env_file:
       - .env.prod
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-changeme_root}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD doit être défini dans .env.prod}
       MARIADB_DATABASE: ${DB_NAME:-gaia_life}
       MARIADB_USER: gaia
-      MARIADB_PASSWORD: ${DB_PASSWORD:-changeme}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD doit être défini dans .env.prod}
     restart: unless-stopped
     volumes:
       - mariadb_data:/var/lib/mysql
@@ -62,7 +65,7 @@ services:
       DB_HOST: mariadb
       DB_NAME: ${DB_NAME:-gaia_life}
       DB_USER: gaia
-      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD doit être défini dans .env.prod}
       BACKUP_DIR: /backups
       BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE:-0 3 * * *}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}

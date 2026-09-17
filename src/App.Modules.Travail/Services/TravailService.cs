@@ -616,15 +616,38 @@ public sealed class TravailService
             .OrderByDescending(e => e.DateDebut)
             .ToListAsync(cancellationToken);
 
+        if (actifs.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = actifs.Select(e => e.Id).ToList();
+        var soldes = await db.SoldeConges.AsNoTracking()
+            .Where(s => ids.Contains(s.EmployeurId) && s.Annee == annee)
+            .ToDictionaryAsync(s => s.EmployeurId, s => s.JoursAcquis, cancellationToken);
+
+        var yearStart = new DateTime(annee, 1, 1);
+        var yearEnd = new DateTime(annee, 12, 31);
+        var conges = await db.Conges.AsNoTracking()
+            .Where(c => ids.Contains(c.EmployeurId)
+                && c.Statut == StatutConge.Valide
+                && c.Type == TypeConge.Paye
+                && c.DateDebut <= yearEnd
+                && c.DateFin >= yearStart)
+            .ToListAsync(cancellationToken);
+
+        var joursPrisParEmployeur = conges
+            .GroupBy(c => c.EmployeurId)
+            .ToDictionary(
+                g => g.Key,
+                g => decimal.Round(g.Sum(c => JoursConsommesDansAnnee(c, annee)), 2));
+
         var rows = new List<TravailEmployeurSolde>(actifs.Count);
         var premier = true;
         foreach (var employeur in actifs)
         {
-            var joursAcquis = await db.SoldeConges.AsNoTracking()
-                .Where(s => s.EmployeurId == employeur.Id && s.Annee == annee)
-                .Select(s => (decimal?)s.JoursAcquis)
-                .FirstOrDefaultAsync(cancellationToken) ?? 0;
-            var joursPris = await JoursPrisValidesAsync(db, employeur.Id, annee, cancellationToken);
+            var joursAcquis = soldes.GetValueOrDefault(employeur.Id);
+            var joursPris = joursPrisParEmployeur.GetValueOrDefault(employeur.Id);
             rows.Add(new TravailEmployeurSolde(
                 employeur.Id,
                 employeur.Nom,

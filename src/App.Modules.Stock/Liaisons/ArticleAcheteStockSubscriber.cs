@@ -29,21 +29,22 @@ public sealed class ArticleAcheteStockSubscriber : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _bus.Abonner<ArticleAcheteEvent>(OnArticleAchete);
+        _bus.Abonner<ArticleAcheteEvent>(OnArticleAcheteAsync);
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private void OnArticleAchete(ArticleAcheteEvent evenement)
+    private async Task OnArticleAcheteAsync(ArticleAcheteEvent evenement)
     {
         try
         {
-            HandleAsync(evenement).GetAwaiter().GetResult();
+            await HandleAsync(evenement);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Échec de la liaison Course→Stock pour l'article {ArticleId}.", evenement.ArticleId);
+            throw;
         }
     }
 

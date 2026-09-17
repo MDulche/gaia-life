@@ -29,21 +29,23 @@ public sealed class ArticleAcheteFinanceSubscriber : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _bus.Abonner<ArticleAcheteEvent>(OnArticleAchete);
+        _bus.Abonner<ArticleAcheteEvent>(OnArticleAcheteAsync);
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private void OnArticleAchete(ArticleAcheteEvent evenement)
+    private async Task OnArticleAcheteAsync(ArticleAcheteEvent evenement)
     {
         try
         {
-            HandleAsync(evenement).GetAwaiter().GetResult();
+            await HandleAsync(evenement);
         }
         catch (Exception ex)
         {
+            // Filet de sécurité : le bus journalise déjà ; contexte métier Course→Finance.
             _logger.LogError(ex, "Échec de la liaison Course→Finance pour l'article {ArticleId}.", evenement.ArticleId);
+            throw;
         }
     }
 

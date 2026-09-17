@@ -65,11 +65,11 @@ public sealed class CourseService : ICourseParametresQuery
 
         if (!etaitAchete && valeur)
         {
-            _evenements.Publier(new ArticleAcheteEvent(
+            await _evenements.PublierAsync(new ArticleAcheteEvent(
                 article.Id,
                 article.ArticleStockId,
                 article.PrixEstime,
-                article.Quantite));
+                article.Quantite), cancellationToken);
         }
     }
 

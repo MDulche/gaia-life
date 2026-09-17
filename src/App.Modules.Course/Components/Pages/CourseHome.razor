@@ -380,7 +380,123 @@
 
     private async Task MarquerAsync(int id, bool valeur)
     {
-        await RunAsync(() => Course.MarquerAchete(id, valeur));
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Course.MarquerAchete(id, valeur);
+            AppliquerMarquerLocal(id, valeur);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Met à jour listes / parcours / camembert en mémoire après une coche réussie
+    /// (évite un ReloadAsync complet à chaque interaction).
+    /// </summary>
+    private void AppliquerMarquerLocal(int id, bool valeur)
+    {
+        var index = _lignes.FindIndex(a => a.Id == id);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var article = _lignes[index];
+
+        if (!_historique && valeur)
+        {
+            _lignes.RemoveAt(index);
+            AjusterParcours(article.MagasinId, -1);
+            AjusterRepartitionMois(article, delta: 1);
+            return;
+        }
+
+        if (_historique && !valeur)
+        {
+            _lignes.RemoveAt(index);
+            AjusterParcours(article.MagasinId, +1);
+            if (EstAchatDuMoisCourant(article.DateAchat))
+            {
+                AjusterRepartitionMois(article, delta: -1);
+            }
+
+            return;
+        }
+
+        article.Achete = valeur;
+        article.DateAchat = valeur ? DateTime.Now : null;
+    }
+
+    private static bool EstAchatDuMoisCourant(DateTime? dateAchat)
+    {
+        if (dateAchat is not DateTime d)
+        {
+            return false;
+        }
+
+        var today = DateTime.Today;
+        return d.Year == today.Year && d.Month == today.Month;
+    }
+
+    private void AjusterParcours(int? magasinId, int delta)
+    {
+        if (magasinId is not int mid || delta == 0)
+        {
+            return;
+        }
+
+        for (var i = 0; i < _parcours.Count; i++)
+        {
+            var row = _parcours[i];
+            if (row.Id != mid)
+            {
+                continue;
+            }
+
+            _parcours[i] = row with { Restants = Math.Max(0, row.Restants + delta) };
+            return;
+        }
+    }
+
+    private void AjusterRepartitionMois(ArticleCourse article, int delta)
+    {
+        if (delta == 0)
+        {
+            return;
+        }
+
+        var cat = _categories.FirstOrDefault(c => c.Id == article.CategorieId);
+        var nom = cat?.Nom ?? $"#{article.CategorieId}";
+        var couleur = cat?.Couleur;
+        var list = _repartition.ToList();
+        var idx = list.FindIndex(p => string.Equals(p.Categorie, nom, StringComparison.Ordinal));
+        if (idx >= 0)
+        {
+            var part = list[idx];
+            var nouveau = part.Nombre + delta;
+            if (nouveau <= 0)
+            {
+                list.RemoveAt(idx);
+            }
+            else
+            {
+                list[idx] = part with { Nombre = nouveau };
+            }
+        }
+        else if (delta > 0)
+        {
+            list.Add(new CourseCategoriePart(nom, delta, couleur));
+        }
+
+        _repartition = list.OrderByDescending(p => p.Nombre).ToList();
     }
 
     private async Task SupprimerAsync(int id, string nom)
