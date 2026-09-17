@@ -1,5 +1,6 @@
 using App.Modules.Stock.Components;
 using App.Modules.Stock.Data;
+using App.Modules.Stock.Liaisons;
 using App.Modules.Stock.Services;
 using App.Shared.Data;
 using App.Shared.Modules;
@@ -9,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace App.Modules.Stock;
 
-/// <summary>Module Stock : factory DbContext, service, widget d'accueil.</summary>
+/// <summary>Module Stock : factory DbContext, service, widget d'accueil, liaison Courses.</summary>
 public sealed class StockModule : IAppModule
 {
     public const string ModuleKey = "stock";
@@ -33,6 +34,8 @@ public sealed class StockModule : IAppModule
             GaiaMariaDb.Configure(options, connectionString);
         });
         services.AddScoped<StockService>();
+        services.AddScoped<IStockArticleCatalogue, StockArticleCatalogue>();
+        services.AddHostedService<ArticleAcheteStockSubscriber>();
     }
 
     /// <summary>No-op si le module n'est pas enregistré (factory absente du DI).</summary>

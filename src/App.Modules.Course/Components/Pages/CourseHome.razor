@@ -2,10 +2,14 @@
 @* Liste à gauche ; stats, jeu de données, parcours magasins (+ mouvements stock si liaison) à droite. *@
 @attribute [Authorize]
 @using System.Globalization
+@using App.Shared.Modules
+@using Microsoft.JSInterop
 @inject CourseService Course
 @inject IActiveModuleGuard ModuleGuard
 @inject IModuleLiaisonQuery Liaisons
+@inject IStockArticleCatalogue StockArticles
 @inject NavigationManager Navigation
+@inject IJSRuntime Js
 
 <PageTitle>Courses</PageTitle>
 
@@ -31,7 +35,7 @@
                     <EditForm Model="_nouveau" OnValidSubmit="AjouterAsync">
                         <DataAnnotationsValidator />
                         <div class="row g-2 align-items-end mb-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label" for="article-nom">Ajouter un article</label>
                                 <InputText id="article-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
                                 <ValidationMessage For="() => _nouveau.Nom" />
@@ -40,7 +44,7 @@
                                 <label class="form-label" for="article-qte">Quantité</label>
                                 <InputText id="article-qte" class="form-control form-control-sm" @bind-Value="_nouveau.Quantite" />
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <label class="form-label" for="article-cat">Catégorie</label>
                                 <InputSelect id="article-cat" class="form-select form-select-sm" @bind-Value="_nouveau.CategorieId">
                                     @foreach (var categorie in _categories)
@@ -59,6 +63,26 @@
                                     }
                                 </InputSelect>
                             </div>
+                            @if (_stockActif)
+                            {
+                                <div class="col-md-2">
+                                    <label class="form-label" for="article-stock">Article stock</label>
+                                    <InputSelect id="article-stock" class="form-select form-select-sm" @bind-Value="_nouveau.ArticleStockId">
+                                        <option value="0">—</option>
+                                        @foreach (var stock in _articlesStock)
+                                        {
+                                            <option value="@stock.Id">@stock.Nom</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                            }
+                            @if (_financeActif)
+                            {
+                                <div class="col-md-2">
+                                    <label class="form-label" for="article-prix">Prix estimé</label>
+                                    <InputNumber id="article-prix" class="form-control form-control-sm" @bind-Value="_nouveau.PrixEstime" />
+                                </div>
+                            }
                             <div class="col-md-1">
                                 <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@(_busy || _categories.Count == 0)">Ajouter</button>
                             </div>
@@ -86,13 +110,14 @@
                                 {
                                     <th>Acheté le</th>
                                 }
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             @if (_lignes.Count == 0)
                             {
                                 <tr>
-                                    <td colspan="5" class="text-muted text-center">
+                                    <td colspan="@(_historique ? 5 : 5)" class="text-muted text-center">
                                         @(_historique ? "Aucun article acheté pour le moment." : "Aucun article à acheter.")
                                     </td>
                                 </tr>
@@ -108,11 +133,22 @@
                                                 <input type="checkbox"
                                                        class="form-check-input"
                                                        disabled="@_busy"
+                                                       checked="@article.Achete"
                                                        aria-label="@($"Marquer {article.Nom} comme acheté")"
-                                                       @onchange="() => CocherAsync(article.Id)" />
+                                                       @onchange="e => MarquerAsync(article.Id, (bool)(e.Value ?? false))" />
                                             </td>
                                         }
-                                        <td>@article.Nom</td>
+                                        <td>
+                                            @article.Nom
+                                            @if (LiaisonIncomplete(article))
+                                            {
+                                                <span class="text-muted ms-1"
+                                                      title="Liaison active : renseignez le champ manquant pour synchroniser Stock/Finance.">
+                                                    <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                                                    <span class="visually-hidden">Liaison incomplete</span>
+                                                </span>
+                                            }
+                                        </td>
                                         <td>@(article.Quantite ?? "—")</td>
                                         <td>
                                             <span class="finance-legend-swatch" style="background:@Swatch(article.Categorie.Couleur)"></span>
@@ -123,7 +159,87 @@
                                         {
                                             <td>@(article.DateAchat?.ToString("g", CultureInfo.GetCultureInfo("fr-FR")) ?? "—")</td>
                                         }
+                                        <td class="text-nowrap text-end">
+                                            @if (!_historique)
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm"
+                                                        disabled="@_busy"
+                                                        @onclick="() => StartEdit(article)">
+                                                    Modifier
+                                                </button>
+                                            }
+                                            <button type="button"
+                                                    class="btn btn-outline-danger btn-sm"
+                                                    disabled="@_busy"
+                                                    @onclick="() => SupprimerAsync(article.Id, article.Nom)">
+                                                Supprimer
+                                            </button>
+                                        </td>
                                     </tr>
+                                    @if (_editId == article.Id)
+                                    {
+                                        <tr>
+                                            <td colspan="6">
+                                                <EditForm Model="_edit" OnValidSubmit="SauverEditAsync">
+                                                    <DataAnnotationsValidator />
+                                                    <div class="row g-2 align-items-end">
+                                                        <div class="col-md-3">
+                                                            <label class="form-label" for="edit-nom">Nom</label>
+                                                            <InputText id="edit-nom" class="form-control form-control-sm" @bind-Value="_edit.Nom" />
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <label class="form-label" for="edit-qte">Quantité</label>
+                                                            <InputText id="edit-qte" class="form-control form-control-sm" @bind-Value="_edit.Quantite" />
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <label class="form-label" for="edit-cat">Catégorie</label>
+                                                            <InputSelect id="edit-cat" class="form-select form-select-sm" @bind-Value="_edit.CategorieId">
+                                                                @foreach (var categorie in _categories)
+                                                                {
+                                                                    <option value="@categorie.Id">@categorie.Nom</option>
+                                                                }
+                                                            </InputSelect>
+                                                        </div>
+                                                        <div class="col-md-2">
+                                                            <label class="form-label" for="edit-mag">Magasin</label>
+                                                            <InputSelect id="edit-mag" class="form-select form-select-sm" @bind-Value="_edit.MagasinId">
+                                                                <option value="0">—</option>
+                                                                @foreach (var magasin in _magasins)
+                                                                {
+                                                                    <option value="@magasin.Id">@magasin.Nom</option>
+                                                                }
+                                                            </InputSelect>
+                                                        </div>
+                                                        @if (_stockActif)
+                                                        {
+                                                            <div class="col-md-2">
+                                                                <label class="form-label" for="edit-stock">Article stock</label>
+                                                                <InputSelect id="edit-stock" class="form-select form-select-sm" @bind-Value="_edit.ArticleStockId">
+                                                                    <option value="0">—</option>
+                                                                    @foreach (var stock in _articlesStock)
+                                                                    {
+                                                                        <option value="@stock.Id">@stock.Nom</option>
+                                                                    }
+                                                                </InputSelect>
+                                                            </div>
+                                                        }
+                                                        @if (_financeActif)
+                                                        {
+                                                            <div class="col-md-2">
+                                                                <label class="form-label" for="edit-prix">Prix estimé</label>
+                                                                <InputNumber id="edit-prix" class="form-control form-control-sm" @bind-Value="_edit.PrixEstime" />
+                                                            </div>
+                                                        }
+                                                        <div class="col-auto">
+                                                            <button type="submit" class="btn btn-primary btn-sm" disabled="@_busy">Enregistrer</button>
+                                                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _editId = null">Annuler</button>
+                                                        </div>
+                                                    </div>
+                                                </EditForm>
+                                            </td>
+                                        </tr>
+                                    }
                                 }
                             }
                         </tbody>
@@ -178,7 +294,7 @@
             @if (_liaisonCourseStock)
             {
                 <WidgetCard Title="Mouvements de stock" Icon="bi-box-seam">
-                    <p class="text-muted mb-0">Aucun mouvement pour le moment.</p>
+                    <p class="text-muted mb-0">Les articles liés au stock s'incrémentent automatiquement à l'achat.</p>
                 </WidgetCard>
             }
         </div>
@@ -187,18 +303,25 @@
 
 @code {
     private const string StockModuleKey = "stock";
+    private const string FinanceModuleKey = "finance";
 
     private bool _ready;
     private bool _busy;
     private bool _historique;
     private bool _liaisonCourseStock;
+    private bool _liaisonCourseFinance;
+    private bool _stockActif;
+    private bool _financeActif;
     private string? _error;
     private List<ArticleCourse> _lignes = [];
     private List<Categorie> _categories = [];
     private List<Magasin> _magasins = [];
     private List<MagasinRestants> _parcours = [];
     private IReadOnlyList<CourseCategoriePart> _repartition = [];
+    private IReadOnlyList<StockArticleRef> _articlesStock = [];
     private NouvelArticleForm _nouveau = new();
+    private int? _editId;
+    private NouvelArticleForm _edit = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -221,6 +344,10 @@
             ? await Course.ListerArticlesAchetes()
             : await Course.ListerArticlesAEnAcheter();
         _liaisonCourseStock = await Liaisons.IsLiaisonActiveAsync(CourseModule.ModuleKey, StockModuleKey);
+        _liaisonCourseFinance = await Liaisons.IsLiaisonActiveAsync(CourseModule.ModuleKey, FinanceModuleKey);
+        _stockActif = await ModuleGuard.IsModuleActiveAsync(StockModuleKey);
+        _financeActif = await ModuleGuard.IsModuleActiveAsync(FinanceModuleKey);
+        _articlesStock = _stockActif ? await StockArticles.ListerAsync() : [];
 
         if (_nouveau.CategorieId == 0 && _categories.Count > 0)
         {
@@ -228,16 +355,81 @@
         }
     }
 
+    private bool LiaisonIncomplete(ArticleCourse article)
+    {
+        if (_liaisonCourseStock && article.ArticleStockId is null)
+        {
+            return true;
+        }
+
+        if (_liaisonCourseFinance && article.PrixEstime is null)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private async Task ToggleHistorique()
     {
         _historique = !_historique;
+        _editId = null;
         _error = null;
         await ReloadAsync();
     }
 
-    private async Task CocherAsync(int id)
+    private async Task MarquerAsync(int id, bool valeur)
     {
-        await RunAsync(() => Course.BasculerAchete(id));
+        await RunAsync(() => Course.MarquerAchete(id, valeur));
+    }
+
+    private async Task SupprimerAsync(int id, string nom)
+    {
+        var ok = await Js.InvokeAsync<bool>("confirm", $"Supprimer « {nom} » ?");
+        if (!ok)
+        {
+            return;
+        }
+
+        await RunAsync(() => Course.SupprimerArticle(id));
+    }
+
+    private void StartEdit(ArticleCourse article)
+    {
+        _editId = article.Id;
+        _edit = new NouvelArticleForm
+        {
+            Nom = article.Nom,
+            Quantite = article.Quantite,
+            CategorieId = article.CategorieId,
+            MagasinId = article.MagasinId ?? 0,
+            ArticleStockId = article.ArticleStockId ?? 0,
+            PrixEstime = article.PrixEstime
+        };
+        _error = null;
+    }
+
+    private async Task SauverEditAsync()
+    {
+        if (_editId is not int id)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Course.ModifierArticle(new ArticleCourse
+            {
+                Id = id,
+                Nom = _edit.Nom,
+                Quantite = _edit.Quantite,
+                CategorieId = _edit.CategorieId,
+                MagasinId = _edit.MagasinId == 0 ? null : _edit.MagasinId,
+                ArticleStockId = _edit.ArticleStockId == 0 ? null : _edit.ArticleStockId,
+                PrixEstime = _edit.PrixEstime
+            });
+            _editId = null;
+        });
     }
 
     private async Task AjouterAsync()
@@ -249,7 +441,9 @@
                 Nom = _nouveau.Nom,
                 Quantite = _nouveau.Quantite,
                 CategorieId = _nouveau.CategorieId,
-                MagasinId = _nouveau.MagasinId == 0 ? null : _nouveau.MagasinId
+                MagasinId = _nouveau.MagasinId == 0 ? null : _nouveau.MagasinId,
+                ArticleStockId = _nouveau.ArticleStockId == 0 ? null : _nouveau.ArticleStockId,
+                PrixEstime = _nouveau.PrixEstime
             });
             var cat = _nouveau.CategorieId;
             var mag = _nouveau.MagasinId;
@@ -291,5 +485,9 @@
         public int CategorieId { get; set; }
 
         public int MagasinId { get; set; }
+
+        public int ArticleStockId { get; set; }
+
+        public decimal? PrixEstime { get; set; }
     }
 }

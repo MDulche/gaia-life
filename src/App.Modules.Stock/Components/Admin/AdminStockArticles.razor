@@ -6,6 +6,20 @@
     <div class="alert alert-danger" role="alert">@_error</div>
 }
 
+@if (!string.IsNullOrEmpty(_info))
+{
+    <div class="alert alert-info" role="alert">@_info</div>
+}
+
+@if (_fusionProposee is { } fusion)
+{
+    <div class="alert alert-warning" role="alert">
+        <p class="mb-2">@fusion.Message</p>
+        <button type="button" class="btn btn-warning btn-sm me-2" disabled="@_busy" @onclick="ConfirmerFusionAsync">Fusionner</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="AnnulerFusion">Annuler</button>
+    </div>
+}
+
 <div class="table-responsive mb-3">
     <table class="table table-sm table-striped align-middle">
         <thead>
@@ -33,7 +47,10 @@
                         @if (_editId == article.Id)
                         {
                             <td><InputText class="form-control form-control-sm" @bind-Value="_editNom" /></td>
-                            <td><InputNumber class="form-control form-control-sm" @bind-Value="_editQuantite" /></td>
+                            <td>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_editQuantite" />
+                                <div class="form-text">Inventaire</div>
+                            </td>
                             <td><InputText class="form-control form-control-sm" @bind-Value="_editUnite" /></td>
                             <td><InputNumber class="form-control form-control-sm" @bind-Value="_editSeuil" /></td>
                             <td>
@@ -119,15 +136,19 @@ else
 @code {
     private bool _busy;
     private string? _error;
+    private string? _info;
     private List<ArticleStock> _articles = [];
     private List<Categorie> _categories = [];
     private int? _editId;
     private string _editNom = string.Empty;
     private decimal _editQuantite;
+    private decimal _editQuantiteInitiale;
     private string? _editUnite;
     private decimal? _editSeuil;
     private int _editCategorieId;
     private ArticleForm _nouveau = new();
+    private AjoutArticleResultat? _fusionProposee;
+    private ArticleForm? _fusionPending;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -146,10 +167,12 @@ else
         _editId = article.Id;
         _editNom = article.Nom;
         _editQuantite = article.Quantite;
+        _editQuantiteInitiale = article.Quantite;
         _editUnite = article.Unite;
         _editSeuil = article.SeuilAlerte;
         _editCategorieId = article.CategorieId;
         _error = null;
+        _info = null;
     }
 
     private async Task SaveEditAsync()
@@ -161,7 +184,12 @@ else
 
         await RunAsync(async () =>
         {
-            await Stock.ModifierArticleAsync(id, _editNom, _editQuantite, _editUnite, _editSeuil, _editCategorieId);
+            await Stock.ModifierInfosArticleAsync(id, _editNom, _editUnite, _editSeuil, _editCategorieId);
+            if (_editQuantite != _editQuantiteInitiale)
+            {
+                await Stock.DefinirQuantiteInventaireAsync(id, _editQuantite);
+            }
+
             _editId = null;
         });
     }
@@ -170,14 +198,64 @@ else
     {
         await RunAsync(async () =>
         {
-            await Stock.AjouterArticleAsync(
+            var resultat = await Stock.AjouterArticleAsync(
                 _nouveau.Nom,
                 _nouveau.Quantite,
                 _nouveau.Unite,
                 _nouveau.SeuilAlerte,
                 _nouveau.CategorieId);
+
+            if (resultat.FusionProposee)
+            {
+                _fusionProposee = resultat;
+                _fusionPending = new ArticleForm
+                {
+                    Nom = _nouveau.Nom,
+                    Quantite = _nouveau.Quantite,
+                    Unite = _nouveau.Unite,
+                    SeuilAlerte = _nouveau.SeuilAlerte,
+                    CategorieId = _nouveau.CategorieId
+                };
+                return;
+            }
+
             _nouveau = new ArticleForm { CategorieId = _categories.FirstOrDefault()?.Id ?? 0 };
+            if (resultat.FusionEffectuee)
+            {
+                _info = resultat.Message;
+            }
         });
+    }
+
+    private async Task ConfirmerFusionAsync()
+    {
+        if (_fusionPending is null)
+        {
+            return;
+        }
+
+        var pending = _fusionPending;
+        await RunAsync(async () =>
+        {
+            var resultat = await Stock.AjouterArticleAsync(
+                pending.Nom,
+                pending.Quantite,
+                pending.Unite,
+                pending.SeuilAlerte,
+                pending.CategorieId,
+                fusionnerSiExistant: true);
+
+            _fusionProposee = null;
+            _fusionPending = null;
+            _nouveau = new ArticleForm { CategorieId = _categories.FirstOrDefault()?.Id ?? 0 };
+            _info = resultat.Message;
+        });
+    }
+
+    private void AnnulerFusion()
+    {
+        _fusionProposee = null;
+        _fusionPending = null;
     }
 
     private async Task DeleteAsync(int id) =>

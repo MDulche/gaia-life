@@ -1,5 +1,7 @@
 using App.Modules.Course.Data;
 using App.Modules.Course.Entities;
+using App.Shared.Events;
+using App.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace App.Modules.Course.Services;
@@ -7,13 +9,15 @@ namespace App.Modules.Course.Services;
 /// <summary>
 /// Accès métier Courses. Chaque méthode ouvre son propre contexte via factory.
 /// </summary>
-public sealed class CourseService
+public sealed class CourseService : ICourseParametresQuery
 {
     private readonly IDbContextFactory<CourseDbContext> _dbFactory;
+    private readonly IEvenementBus _evenements;
 
-    public CourseService(IDbContextFactory<CourseDbContext> dbFactory)
+    public CourseService(IDbContextFactory<CourseDbContext> dbFactory, IEvenementBus evenements)
     {
         _dbFactory = dbFactory;
+        _evenements = evenements;
     }
 
     public async Task<List<ArticleCourse>> ListerArticlesAEnAcheter(CancellationToken cancellationToken = default)
@@ -40,15 +44,33 @@ public sealed class CourseService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task BasculerAchete(int articleId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Force l'état acheté. Publie <see cref="ArticleAcheteEvent"/> uniquement sur le passage false → true.
+    /// </summary>
+    public async Task MarquerAchete(int articleId, bool valeur, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == articleId, cancellationToken)
             ?? throw new InvalidOperationException("Article introuvable.");
 
-        article.Achete = !article.Achete;
-        article.DateAchat = article.Achete ? DateTime.Now : null;
+        if (article.Achete == valeur)
+        {
+            return;
+        }
+
+        var etaitAchete = article.Achete;
+        article.Achete = valeur;
+        article.DateAchat = valeur ? DateTime.Now : null;
         await db.SaveChangesAsync(cancellationToken);
+
+        if (!etaitAchete && valeur)
+        {
+            _evenements.Publier(new ArticleAcheteEvent(
+                article.Id,
+                article.ArticleStockId,
+                article.PrixEstime,
+                article.Quantite));
+        }
     }
 
     public async Task AjouterArticle(ArticleCourse article, CancellationToken cancellationToken = default)
@@ -58,6 +80,11 @@ public sealed class CourseService
         if (string.IsNullOrWhiteSpace(nom))
         {
             throw new InvalidOperationException("Le nom de l'article est obligatoire.");
+        }
+
+        if (article.PrixEstime is < 0)
+        {
+            throw new InvalidOperationException("Le prix estimé ne peut pas être négatif.");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -77,9 +104,48 @@ public sealed class CourseService
             CategorieId = article.CategorieId,
             MagasinId = article.MagasinId,
             Quantite = string.IsNullOrWhiteSpace(article.Quantite) ? null : article.Quantite.Trim(),
+            ArticleStockId = article.ArticleStockId,
+            PrixEstime = article.PrixEstime,
             Achete = false,
             DateAjout = DateTime.Now
         });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ModifierArticle(ArticleCourse article, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(article);
+        var nom = article.Nom.Trim();
+        if (string.IsNullOrWhiteSpace(nom))
+        {
+            throw new InvalidOperationException("Le nom de l'article est obligatoire.");
+        }
+
+        if (article.PrixEstime is < 0)
+        {
+            throw new InvalidOperationException("Le prix estimé ne peut pas être négatif.");
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await db.Articles.FirstOrDefaultAsync(a => a.Id == article.Id, cancellationToken)
+            ?? throw new InvalidOperationException("Article introuvable.");
+
+        if (!await db.Categories.AnyAsync(c => c.Id == article.CategorieId, cancellationToken))
+        {
+            throw new InvalidOperationException("Catégorie introuvable.");
+        }
+
+        if (article.MagasinId is { } magasinId && !await db.Magasins.AnyAsync(m => m.Id == magasinId, cancellationToken))
+        {
+            throw new InvalidOperationException("Magasin introuvable.");
+        }
+
+        existing.Nom = nom;
+        existing.CategorieId = article.CategorieId;
+        existing.MagasinId = article.MagasinId;
+        existing.Quantite = string.IsNullOrWhiteSpace(article.Quantite) ? null : article.Quantite.Trim();
+        existing.ArticleStockId = article.ArticleStockId;
+        existing.PrixEstime = article.PrixEstime;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -123,8 +189,22 @@ public sealed class CourseService
 
     public async Task<List<Magasin>> ListerMagasinsOrdonnes(CancellationToken cancellationToken = default)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Magasins.AsNoTracking()
+        await using (var db = await _dbFactory.CreateDbContextAsync(cancellationToken))
+        {
+            var magasins = await db.Magasins.AsNoTracking()
+                .OrderBy(m => m.Ordre)
+                .ThenBy(m => m.Nom)
+                .ToListAsync(cancellationToken);
+
+            if (!ADesTrousOuDoublonsOrdre(magasins.Select(m => m.Ordre)))
+            {
+                return magasins;
+            }
+        }
+
+        await NormaliserOrdreMagasinsAsync(cancellationToken);
+        await using var dbFresh = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        return await dbFresh.Magasins.AsNoTracking()
             .OrderBy(m => m.Ordre)
             .ThenBy(m => m.Nom)
             .ToListAsync(cancellationToken);
@@ -176,9 +256,24 @@ public sealed class CourseService
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var maxOrdre = await db.Magasins.Select(m => (int?)m.Ordre).MaxAsync(cancellationToken) ?? 0;
-        db.Magasins.Add(new Magasin { Nom = trimmed, Ordre = maxOrdre + 1 });
-        await db.SaveChangesAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var maxOrdre = await db.Magasins.Select(m => (int?)m.Ordre).MaxAsync(cancellationToken) ?? 0;
+            db.Magasins.Add(new Magasin { Nom = trimmed, Ordre = maxOrdre + 1 });
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            // Collision concurrente sur Ordre : normaliser puis réessayer une fois.
+            await NormaliserOrdreMagasinsAsync(cancellationToken);
+            await using var dbRetry = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            var maxOrdre = await dbRetry.Magasins.Select(m => (int?)m.Ordre).MaxAsync(cancellationToken) ?? 0;
+            dbRetry.Magasins.Add(new Magasin { Nom = trimmed, Ordre = maxOrdre + 1 });
+            await dbRetry.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task ModifierMagasinAsync(int id, string nom, CancellationToken cancellationToken = default)
@@ -207,6 +302,7 @@ public sealed class CourseService
 
         db.Magasins.Remove(magasin);
         await db.SaveChangesAsync(cancellationToken);
+        await NormaliserOrdreMagasinsAsync(cancellationToken);
     }
 
     public async Task DeplacerMagasinAsync(int id, int delta, CancellationToken cancellationToken = default)
@@ -217,21 +313,55 @@ public sealed class CourseService
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var magasins = await db.Magasins.OrderBy(m => m.Ordre).ThenBy(m => m.Nom).ToListAsync(cancellationToken);
-        var index = magasins.FindIndex(m => m.Id == id);
-        if (index < 0)
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new InvalidOperationException("Magasin introuvable.");
-        }
+            var magasins = await db.Magasins.OrderBy(m => m.Ordre).ThenBy(m => m.Nom).ToListAsync(cancellationToken);
+            if (ADesTrousOuDoublonsOrdre(magasins.Select(m => m.Ordre)))
+            {
+                await NormaliserOrdreMagasinsCoreAsync(db, cancellationToken);
+                magasins = await db.Magasins.OrderBy(m => m.Ordre).ThenBy(m => m.Nom).ToListAsync(cancellationToken);
+            }
 
-        var cible = index + delta;
-        if (cible < 0 || cible >= magasins.Count)
+            var index = magasins.FindIndex(m => m.Id == id);
+            if (index < 0)
+            {
+                throw new InvalidOperationException("Magasin introuvable.");
+            }
+
+            var cible = index + delta;
+            if (cible < 0 || cible >= magasins.Count)
+            {
+                await tx.CommitAsync(cancellationToken);
+                return;
+            }
+
+            (magasins[index].Ordre, magasins[cible].Ordre) = (magasins[cible].Ordre, magasins[index].Ordre);
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
         {
-            return;
+            await tx.RollbackAsync(cancellationToken);
+            throw;
         }
+    }
 
-        (magasins[index].Ordre, magasins[cible].Ordre) = (magasins[cible].Ordre, magasins[index].Ordre);
-        await db.SaveChangesAsync(cancellationToken);
+    /// <summary>Ré-numérote les magasins 1..n sans trou ni doublon.</summary>
+    public async Task NormaliserOrdreMagasinsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await NormaliserOrdreMagasinsCoreAsync(db, cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task AjouterCategorieAsync(string nom, string? couleur, CancellationToken cancellationToken = default)
@@ -305,6 +435,70 @@ public sealed class CourseService
         db.Articles.RemoveRange(aSupprimer);
         await db.SaveChangesAsync(cancellationToken);
         return aSupprimer.Count;
+    }
+
+    public async Task<int?> GetCompteCoursesParDefautIdAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var parametre = await db.Parametres.AsNoTracking().OrderBy(p => p.Id).FirstOrDefaultAsync(cancellationToken);
+        return parametre?.CompteCoursesParDefautId;
+    }
+
+    public async Task DefinirCompteCoursesParDefautAsync(int? compteId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var parametre = await db.Parametres.OrderBy(p => p.Id).FirstOrDefaultAsync(cancellationToken);
+        if (parametre is null)
+        {
+            parametre = new CourseParametre();
+            db.Parametres.Add(parametre);
+        }
+
+        parametre.CompteCoursesParDefautId = compteId;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public static bool ADesTrousOuDoublonsOrdre(IEnumerable<int> ordres)
+    {
+        var list = ordres.OrderBy(o => o).ToList();
+        if (list.Count == 0)
+        {
+            return false;
+        }
+
+        if (list.Distinct().Count() != list.Count)
+        {
+            return true;
+        }
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i] != i + 1)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task NormaliserOrdreMagasinsCoreAsync(CourseDbContext db, CancellationToken cancellationToken)
+    {
+        var magasins = await db.Magasins.OrderBy(m => m.Ordre).ThenBy(m => m.Nom).ThenBy(m => m.Id).ToListAsync(cancellationToken);
+        // Deux passes pour éviter les collisions sur l'index unique pendant la renumérotation.
+        for (var i = 0; i < magasins.Count; i++)
+        {
+            magasins[i].Ordre = -(i + 1);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        for (var i = 0; i < magasins.Count; i++)
+        {
+            magasins[i].Ordre = i + 1;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 }
 

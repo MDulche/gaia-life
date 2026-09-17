@@ -17,6 +17,12 @@ public class ArticleCourse
 
     public string? Quantite { get; set; }
 
+    /// <summary>Article Stock lié (pas de FK cross-module) ; utilisé si liaison Course|Stock active.</summary>
+    public int? ArticleStockId { get; set; }
+
+    /// <summary>Montant estimé pour la sortie Finance ; utilisé si liaison Course|Finance active.</summary>
+    public decimal? PrixEstime { get; set; }
+
     public bool Achete { get; set; }
 
     public DateTime DateAjout { get; set; }

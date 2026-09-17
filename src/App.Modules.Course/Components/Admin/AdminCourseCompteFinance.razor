@@ -1,0 +1,77 @@
+@using App.Shared.Modules
+@inject CourseService Course
+@inject IActiveModuleGuard ModuleGuard
+@inject IFinanceCompteCatalogue ComptesFinance
+
+@if (_financeActif)
+{
+    <h3 class="h6 mt-4">Compte Finance par défaut (liaison Courses)</h3>
+    <p class="text-muted small">
+        Utilisé pour créer une sortie automatique lorsque la liaison Course–Finance est active et qu'un prix estimé est renseigné.
+    </p>
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+    @if (!string.IsNullOrEmpty(_ok))
+    {
+        <div class="alert alert-success" role="alert">@_ok</div>
+    }
+
+    <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-8">
+            <label class="form-label" for="compte-courses">Compte courses</label>
+            <select id="compte-courses" class="form-select form-select-sm" @bind="_compteId">
+                <option value="0">— Aucun —</option>
+                @foreach (var compte in _comptes)
+                {
+                    <option value="@compte.Id">@compte.Nom</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <button type="button" class="btn btn-primary btn-sm w-100" disabled="@_busy" @onclick="SaveAsync">Enregistrer</button>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _financeActif;
+    private bool _busy;
+    private string? _error;
+    private string? _ok;
+    private int _compteId;
+    private IReadOnlyList<FinanceCompteRef> _comptes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _financeActif = await ModuleGuard.IsModuleActiveAsync("finance");
+        if (!_financeActif)
+        {
+            return;
+        }
+
+        _comptes = await ComptesFinance.ListerAsync();
+        _compteId = await Course.GetCompteCoursesParDefautIdAsync() ?? 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        _ok = null;
+        try
+        {
+            await Course.DefinirCompteCoursesParDefautAsync(_compteId == 0 ? null : _compteId);
+            _ok = "Compte courses enregistré.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

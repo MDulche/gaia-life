@@ -33,6 +33,7 @@ public sealed class CourseModule : IAppModule
             GaiaMariaDb.Configure(options, connectionString);
         });
         services.AddScoped<CourseService>();
+        services.AddScoped<ICourseParametresQuery>(sp => sp.GetRequiredService<CourseService>());
     }
 
     /// <summary>No-op si le module n'est pas enregistré (factory absente du DI).</summary>

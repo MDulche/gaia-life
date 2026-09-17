@@ -20,13 +20,15 @@ public class CourseDbContext : DbContext
 
     public DbSet<ArticleCourse> Articles => Set<ArticleCourse>();
 
+    public DbSet<CourseParametre> Parametres => Set<CourseParametre>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Magasin>(entity =>
         {
             entity.ToTable("CourseMagasins");
             entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
-            entity.HasIndex(e => e.Ordre);
+            entity.HasIndex(e => e.Ordre).IsUnique();
             entity.HasMany(e => e.Articles)
                 .WithOne(e => e.Magasin)
                 .HasForeignKey(e => e.MagasinId)
@@ -50,9 +52,15 @@ public class CourseDbContext : DbContext
             entity.ToTable("CourseArticles");
             entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Quantite).HasMaxLength(64);
+            entity.Property(e => e.PrixEstime).HasPrecision(18, 2);
             entity.HasIndex(e => e.Achete);
             entity.HasIndex(e => new { e.MagasinId, e.Achete });
             entity.HasIndex(e => e.DateAchat);
+        });
+
+        modelBuilder.Entity<CourseParametre>(entity =>
+        {
+            entity.ToTable("CourseParametres");
         });
     }
 }

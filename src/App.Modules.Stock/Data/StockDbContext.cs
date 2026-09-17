@@ -18,6 +18,8 @@ public class StockDbContext : DbContext
 
     public DbSet<ArticleStock> Articles => Set<ArticleStock>();
 
+    public DbSet<MouvementStock> Mouvements => Set<MouvementStock>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Categorie>(entity =>
@@ -34,13 +36,30 @@ public class StockDbContext : DbContext
 
         modelBuilder.Entity<ArticleStock>(entity =>
         {
+            // Quantite dénormalisée (= somme des mouvements), maj uniquement via AjusterQuantiteAsync.
+            // Pas de CHECK Quantite >= 0 : le motif « Ajustement inventaire » peut laisser un négatif
+            // (rattrapage). Garde-fou applicatif dans StockService.AjusterQuantiteAsync.
             entity.ToTable("StockArticles");
             entity.Property(e => e.Nom).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.NomNormalise).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Quantite).HasPrecision(18, 3);
             entity.Property(e => e.Unite).HasMaxLength(32);
             entity.Property(e => e.SeuilAlerte).HasPrecision(18, 3);
-            entity.HasIndex(e => e.Nom);
+            entity.HasIndex(e => e.NomNormalise).IsUnique();
             entity.HasIndex(e => e.CategorieId);
+            entity.HasMany(e => e.Mouvements)
+                .WithOne(e => e.Article)
+                .HasForeignKey(e => e.ArticleStockId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MouvementStock>(entity =>
+        {
+            entity.ToTable("StockMouvements");
+            entity.Property(e => e.Delta).HasPrecision(18, 3);
+            entity.Property(e => e.Motif).HasMaxLength(128).IsRequired();
+            entity.HasIndex(e => e.ArticleStockId);
+            entity.HasIndex(e => e.DateMouvement);
         });
     }
 }
