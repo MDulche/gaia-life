@@ -83,6 +83,15 @@ function Resolve-JavaHome {
         return $env:JAVA_HOME
     }
 
+    # JDK fourni par le workload / tooling Android (.NET)
+    $androidOpenJdks = @(
+        Get-ChildItem 'C:\Program Files\Android\openjdk' -Directory -ErrorAction SilentlyContinue
+        Get-ChildItem 'C:\Program Files (x86)\Android\openjdk' -Directory -ErrorAction SilentlyContinue
+    ) | Sort-Object Name -Descending
+    if ($androidOpenJdks.Count -gt 0) {
+        return $androidOpenJdks[0].FullName
+    }
+
     $microsoftJdks = @(Get-ChildItem 'C:\Program Files\Microsoft' -Filter 'jdk*' -Directory -ErrorAction SilentlyContinue |
         Sort-Object Name -Descending)
     if ($microsoftJdks.Count -gt 0) {
@@ -100,7 +109,65 @@ function Resolve-JavaHome {
         return $adoptium[0].FullName
     }
 
+    # java.exe deja sur le PATH
+    $javaCmd = Get-Command java -ErrorAction SilentlyContinue
+    if ($javaCmd) {
+        $bin = Split-Path $javaCmd.Source -Parent
+        $home = Split-Path $bin -Parent
+        if (Test-Path (Join-Path $home 'bin\java.exe')) {
+            return $home
+        }
+    }
+
     return $null
+}
+
+function Set-JavaEnvironment {
+    param([string]$JavaHome)
+
+    $env:JAVA_HOME = $JavaHome
+    $javaBin = Join-Path $JavaHome 'bin'
+    if ((Test-Path $javaBin) -and ($env:PATH -notlike "*$javaBin*")) {
+        $env:PATH = "$javaBin;$env:PATH"
+    }
+}
+
+function New-SdkProcess {
+    param(
+        [string]$FileName,
+        [string]$Arguments,
+        [string]$StdInText = $null
+    )
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $FileName
+    $psi.Arguments = $Arguments
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    if ($env:JAVA_HOME) {
+        $psi.EnvironmentVariables['JAVA_HOME'] = $env:JAVA_HOME
+    }
+    if ($env:ANDROID_HOME) {
+        $psi.EnvironmentVariables['ANDROID_HOME'] = $env:ANDROID_HOME
+        $psi.EnvironmentVariables['ANDROID_SDK_ROOT'] = $env:ANDROID_SDK_ROOT
+    }
+
+    $p = [System.Diagnostics.Process]::Start($psi)
+    if ($null -ne $StdInText) {
+        $p.StandardInput.Write($StdInText)
+    }
+    $p.StandardInput.Close()
+    $stdout = $p.StandardOutput.ReadToEnd()
+    $stderr = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    return [pscustomobject]@{
+        ExitCode = $p.ExitCode
+        StdOut   = $stdout
+        StdErr   = $stderr
+    }
 }
 
 function Find-SdkTool {
@@ -135,33 +202,70 @@ function Test-MauiCliAvailable {
 function Get-AvdList {
     param([string]$EmulatorExe)
 
-    $list = New-Object System.Collections.Generic.List[string]
+    $names = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+    $avdIniDir = Join-Path $env:USERPROFILE '.android\avd'
+    if (Test-Path $avdIniDir) {
+        Get-ChildItem $avdIniDir -Filter '*.ini' -File -ErrorAction SilentlyContinue | ForEach-Object {
+            [void]$names.Add([System.IO.Path]::GetFileNameWithoutExtension($_.Name))
+        }
+    }
 
     if (Test-MauiCliAvailable) {
         try {
-            $out = & maui android emulator list 2>&1 | Out-String
-            Write-Log ("maui emulator list: {0}" -f $out)
-            foreach ($line in ($out -split "`r?`n")) {
-                $t = $line.Trim()
-                if ($t) { [void]$list.Add($t) }
+            $out = & maui android emulator list 2>&1 | ForEach-Object { "$_" }
+            Write-Log ("maui emulator list: {0}" -f ($out -join '|'))
+            foreach ($line in $out) {
+                $t = "$line".Trim()
+                if ($t -and $t -notmatch '^(Name|----|Available|ID)') { [void]$names.Add($t) }
             }
-            if ($list.Count -gt 0) { return , $list.ToArray() }
         }
         catch {
             Write-Log ("maui list failed: {0}" -f $_)
         }
     }
 
-    if ($EmulatorExe) {
-        $out = & $EmulatorExe -list-avds 2>&1
-        Write-Log ("emulator -list-avds: {0}" -f ($out | Out-String))
-        foreach ($line in @($out)) {
+    if ($EmulatorExe -and (Test-Path $EmulatorExe)) {
+        $out = & $EmulatorExe -list-avds 2>&1 | ForEach-Object { "$_" }
+        Write-Log ("emulator -list-avds: {0}" -f ($out -join '|'))
+        foreach ($line in $out) {
             $t = "$line".Trim()
-            if ($t) { [void]$list.Add($t) }
+            if ($t) { [void]$names.Add($t) }
         }
     }
 
-    return , $list.ToArray()
+    return @($names)
+}
+
+function Test-AvdExists {
+    param([string]$Name)
+    $ini = Join-Path $env:USERPROFILE ('.android\avd\{0}.ini' -f $Name)
+    if (Test-Path $ini) { return $true }
+    $listed = @(Get-AvdList -EmulatorExe $null)
+    return ($listed -contains $Name)
+}
+
+function Resolve-EmulatorExe {
+    param([string]$SdkRoot)
+
+    $exe = Find-SdkTool -SdkRoot $SdkRoot -RelativePath 'emulator\emulator.exe'
+    if ($exe) { return $exe }
+
+    $cmd = Get-Command emulator -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+
+function Resolve-AvdManager {
+    param([string]$SdkRoot)
+
+    $avdmanager = Find-SdkTool -SdkRoot $SdkRoot -RelativePath 'cmdline-tools\latest\bin\avdmanager.bat'
+    if ($avdmanager) { return $avdmanager }
+
+    $altAvd = Get-ChildItem (Join-Path $SdkRoot 'cmdline-tools') -Recurse -Filter 'avdmanager.bat' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($altAvd) { return $altAvd.FullName }
+    return $null
 }
 
 function Test-EmulatorDevicePresent {
@@ -210,8 +314,7 @@ function Initialize-GaiaAvd {
     )
 
     Write-Step ("Verification de l AVD '{0}'..." -f $Name)
-    $avds = @(Get-AvdList -EmulatorExe $EmulatorExe)
-    if ($avds -contains $Name) {
+    if (Test-AvdExists -Name $Name) {
         Write-Ok ("AVD '{0}' deja present." -f $Name)
         return
     }
@@ -224,8 +327,7 @@ function Initialize-GaiaAvd {
         if ($LASTEXITCODE -ne 0) {
             Stop-WithError ("Echec maui android emulator create (code {0}). Essayez: maui android sdk install emulator" -f $LASTEXITCODE)
         }
-        $avds = @(Get-AvdList -EmulatorExe $EmulatorExe)
-        if ($avds -contains $Name) {
+        if (Test-AvdExists -Name $Name) {
             Write-Ok ("AVD '{0}' cree via maui CLI." -f $Name)
             return
         }
@@ -254,48 +356,42 @@ function Initialize-GaiaAvd {
         Write-Host ("Installation eventuelle image: {0}" -f $systemImage) -ForegroundColor Yellow
         Write-Log ("sdkmanager {0}" -f $systemImage)
         $yes = ('y' + [Environment]::NewLine) * 80
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $sdkmanager
-        $psi.Arguments = ('--sdk_root="{0}" "{1}" "emulator" "platform-tools"' -f $SdkRoot, $systemImage)
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        $psi.UseShellExecute = $false
-        $p = [System.Diagnostics.Process]::Start($psi)
-        $p.StandardInput.Write($yes)
-        $p.StandardInput.Close()
-        $p.WaitForExit()
-        Write-Log ("sdkmanager exit {0}" -f $p.ExitCode)
+        $result = New-SdkProcess -FileName $sdkmanager -Arguments ('--sdk_root="{0}" "{1}" "emulator" "platform-tools"' -f $SdkRoot, $systemImage) -StdInText $yes
+        Write-Log ("sdkmanager exit {0}" -f $result.ExitCode)
+        Write-Log ("sdkmanager out: {0}" -f $result.StdOut)
+        Write-Log ("sdkmanager err: {0}" -f $result.StdErr)
+        if ($result.ExitCode -ne 0) {
+            $combined = ($result.StdOut + $result.StdErr)
+            if ($combined -match 'JAVA_HOME') {
+                Stop-WithError 'sdkmanager exige JAVA_HOME. Installez un JDK 17+ ou definissez JAVA_HOME. Voir docs/EMULATEUR-ANDROID.md'
+            }
+            Write-Host ("sdkmanager a echoue (code {0}) - on tente quand meme avdmanager." -f $result.ExitCode) -ForegroundColor Yellow
+        }
     }
     else {
         Write-Host 'sdkmanager introuvable - tentative avdmanager avec image deja presente.' -ForegroundColor Yellow
     }
 
     Write-Log ("avdmanager create avd -n {0} -k {1}" -f $Name, $systemImage)
-    $psi2 = New-Object System.Diagnostics.ProcessStartInfo
-    $psi2.FileName = $AvdManager
-    $psi2.Arguments = ('create avd -n "{0}" -k "{1}" -d pixel_6 --force' -f $Name, $systemImage)
-    $psi2.RedirectStandardInput = $true
-    $psi2.RedirectStandardOutput = $true
-    $psi2.RedirectStandardError = $true
-    $psi2.UseShellExecute = $false
-    $p2 = [System.Diagnostics.Process]::Start($psi2)
-    $p2.StandardInput.WriteLine('no')
-    $p2.StandardInput.Close()
-    $stdout = $p2.StandardOutput.ReadToEnd()
-    $stderr = $p2.StandardError.ReadToEnd()
-    $p2.WaitForExit()
-    Write-Log ("avdmanager out: {0}" -f $stdout)
-    Write-Log ("avdmanager err: {0}" -f $stderr)
-    Write-Log ("avdmanager exit {0}" -f $p2.ExitCode)
+    $createArgs = ('create avd -n "{0}" -k "{1}" -d pixel_6 --force' -f $Name, $systemImage)
+    $result2 = New-SdkProcess -FileName $AvdManager -Arguments $createArgs -StdInText ('no' + [Environment]::NewLine)
+    Write-Log ("avdmanager out: {0}" -f $result2.StdOut)
+    Write-Log ("avdmanager err: {0}" -f $result2.StdErr)
+    Write-Log ("avdmanager exit {0}" -f $result2.ExitCode)
 
-    $avds = @(Get-AvdList -EmulatorExe $EmulatorExe)
-    if ($avds -contains $Name) {
+    if (Test-AvdExists -Name $Name) {
         Write-Ok ("AVD '{0}' cree via avdmanager." -f $Name)
         return
     }
 
-    Stop-WithError ("Echec creation AVD '{0}' (image {1}). Voir docs/EMULATEUR-ANDROID.md" -f $Name, $systemImage)
+    if ($result2.ExitCode -eq 0 -and (Test-Path (Join-Path $env:USERPROFILE ('.android\avd\{0}.ini' -f $Name)))) {
+        Write-Ok ("AVD '{0}' cree (fichier .ini present)." -f $Name)
+        return
+    }
+
+    $detail = (($result2.StdOut + $result2.StdErr) -replace '\s+', ' ').Trim()
+    if (-not $detail) { $detail = "exit $($result2.ExitCode)" }
+    Stop-WithError ("Echec creation AVD '{0}' (image {1}). Detail: {2}. Voir docs/EMULATEUR-ANDROID.md" -f $Name, $systemImage, $detail)
 }
 
 function Start-GaiaAvd {
@@ -374,20 +470,15 @@ Write-Ok ("Android SDK : {0}" -f $sdk)
 
 $java = Resolve-JavaHome
 if ($java) {
-    $env:JAVA_HOME = $java
+    Set-JavaEnvironment -JavaHome $java
     Write-Ok ("JAVA_HOME : {0}" -f $java)
 }
 else {
-    Write-Host 'JAVA_HOME non detecte - le build MAUI peut echouer (JDK 17+ recommande).' -ForegroundColor Yellow
+    Stop-WithError 'JAVA_HOME introuvable (sdkmanager/avdmanager en ont besoin). Installez Microsoft OpenJDK 17+ ou le JDK Android (C:\Program Files\Android\openjdk\...). Voir docs/EMULATEUR-ANDROID.md'
 }
 
-$emulator = Find-SdkTool -SdkRoot $sdk -RelativePath 'emulator\emulator.exe'
-$avdmanager = Find-SdkTool -SdkRoot $sdk -RelativePath 'cmdline-tools\latest\bin\avdmanager.bat'
-if (-not $avdmanager) {
-    $altAvd = Get-ChildItem (Join-Path $sdk 'cmdline-tools') -Recurse -Filter 'avdmanager.bat' -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($altAvd) { $avdmanager = $altAvd.FullName }
-}
+$emulator = Resolve-EmulatorExe -SdkRoot $sdk
+$avdmanager = Resolve-AvdManager -SdkRoot $sdk
 
 $adb = Get-AdbPath -SdkRoot $sdk
 if (-not $adb) {
@@ -396,6 +487,14 @@ if (-not $adb) {
 Write-Ok ("adb : {0}" -f $adb)
 
 Initialize-GaiaAvd -Name $AvdName -SdkRoot $sdk -EmulatorExe $emulator -AvdManager $avdmanager
+
+# Apres install sdkmanager, emulator.exe peut venir d'apparaitre
+$emulator = Resolve-EmulatorExe -SdkRoot $sdk
+if (-not $emulator) {
+    Stop-WithError ("emulator.exe introuvable sous {0}\emulator. Installez le package 'emulator' (sdkmanager)." -f $sdk)
+}
+Write-Ok ("emulator : {0}" -f $emulator)
+
 Start-GaiaAvd -Name $AvdName -EmulatorExe $emulator -Adb $adb
 
 if ($SkipRun) {

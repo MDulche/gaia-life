@@ -179,7 +179,7 @@ adb logcat -d | Select-String -Pattern 'gaialife|SQLite|Maui'
 
 | Symptôme | Piste |
 | --- | --- |
-| `Android SDK introuvable` | Définir `GAIALIFE_ANDROID_SDK` / `ANDROID_HOME` ; relancer `InstallAndroidDependencies` |
+| `JAVA_HOME` non détecté | Le script cherche aussi `C:\Program Files\Android\openjdk\jdk-*` (JDK du tooling .NET Android). Sinon installer Microsoft OpenJDK 17+ et définir `JAVA_HOME`. |
 | `adb introuvable` | Installer `platform-tools` dans le SDK |
 | Timeout boot | WHPX/Hyper-V ; augmenter `-BootTimeoutSeconds` ; fermer les anciens `qemu` |
 | `NETSDK` / workload | `dotnet workload install maui` puis redémarrer le terminal |
