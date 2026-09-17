@@ -21,6 +21,12 @@ logs/*
 # Certificats mkcert (clé privée et CA locale, jamais commités)
 certs/*
 !certs/.gitkeep
+archive/web-dashboard/certs/*
+!archive/web-dashboard/certs/.gitkeep
+*.pem
+
+# Solution XML VS (format .slnx) — on versionne uniquement GaiaLife.sln
+*.slnx
 
 # ASP.NET Data Protection keys (dev Docker volume)
 .dataprotection-keys/
