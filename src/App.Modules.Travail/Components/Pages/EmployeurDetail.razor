@@ -26,6 +26,27 @@
         <div class="alert alert-danger" role="alert">@_error</div>
     }
 
+    @if (_pendingDeleteFiche is not null)
+    {
+        <div class="alert alert-warning" role="alertdialog">
+            <p class="mb-2">Supprimer la fiche de paie de @TravailFormat.Mois(_pendingDeleteFiche.Mois) ?</p>
+            <button type="button" class="btn btn-danger btn-sm me-2" disabled="@_busy" @onclick="ConfirmDeleteFicheAsync">Confirmer</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _pendingDeleteFiche = null">Annuler</button>
+        </div>
+    }
+
+    @if (_pendingDeleteHs is not null)
+    {
+        <div class="alert alert-warning" role="alertdialog">
+            <p class="mb-2">
+                Supprimer les heures supplémentaires du @_pendingDeleteHs.Date.ToString("d")
+                (@TravailFormat.Heures(_pendingDeleteHs.DureeCalculee)) ?
+            </p>
+            <button type="button" class="btn btn-danger btn-sm me-2" disabled="@_busy" @onclick="ConfirmDeleteHsAsync">Confirmer</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _pendingDeleteHs = null">Annuler</button>
+        </div>
+    }
+
     <div class="travail-dashboard">
         <div class="travail-dashboard-col">
             <WidgetCard Title="Salaire" Icon="bi-cash-coin">
@@ -57,7 +78,7 @@
                 </WidgetCard>
 
                 <WidgetCard Title="Heures supplémentaires" Icon="bi-clock-history">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                         <div>
                             <p class="finance-account-primary mb-0">@TravailFormat.Heures(_totalHs)</p>
                             <p class="small text-muted mb-0">Mois en cours</p>
@@ -66,9 +87,40 @@
                                 class="btn btn-outline-primary btn-sm"
                                 disabled="@_busy"
                                 @onclick="ToggleHs">
-                            @(_showHs ? "Fermer" : "Ajouter")
+                            @(_showHs && _editHsId is null ? "Fermer" : "Ajouter")
                         </button>
                     </div>
+                    @if (_heuresSup.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Horaires</th>
+                                        <th class="text-end">Durée</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var hs in _heuresSup)
+                                    {
+                                        <tr>
+                                            <td>@hs.Date.ToString("d")</td>
+                                            <td class="small">@hs.HeureDebut.ToString(@"hh\:mm")–@hs.HeureFin.ToString(@"hh\:mm")</td>
+                                            <td class="text-end">@TravailFormat.Heures(hs.DureeCalculee)</td>
+                                            <td class="text-end text-nowrap">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+                                                        @onclick="() => StartEditHs(hs)">Modifier</button>
+                                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy"
+                                                        @onclick="() => _pendingDeleteHs = hs">Supprimer</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
                 </WidgetCard>
             </div>
 
@@ -92,8 +144,8 @@
 
             @if (_showHs)
             {
-                <WidgetCard Title="Ajouter des heures supplémentaires">
-                    <EditForm Model="_hs" OnValidSubmit="CreateHsAsync">
+                <WidgetCard Title="@(_editHsId is int ? "Modifier les heures supplémentaires" : "Ajouter des heures supplémentaires")">
+                    <EditForm Model="_hs" OnValidSubmit="SaveHsAsync">
                         <DataAnnotationsValidator />
                         <div class="row g-3">
                             <div class="col-md-4">
@@ -134,6 +186,10 @@
                                     }
                                 </p>
                                 <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>
+                                @if (_editHsId is not null)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary ms-2" @onclick="CancelEditHs">Annuler</button>
+                                }
                             </div>
                         </div>
                     </EditForm>
@@ -245,8 +301,8 @@
 
             @if (_showPaie)
             {
-                <WidgetCard Title="Nouvelle fiche de paie">
-                    <EditForm Model="_fiche" OnValidSubmit="CreateFicheAsync">
+                <WidgetCard Title="@(_editFicheId is int ? "Modifier la fiche de paie" : "Nouvelle fiche de paie")">
+                    <EditForm Model="_fiche" OnValidSubmit="SaveFicheAsync">
                         <DataAnnotationsValidator />
                         <div class="row g-3">
                             <div class="col-md-6">
@@ -276,6 +332,10 @@
                             </div>
                             <div class="col-12">
                                 <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>
+                                @if (_editFicheId is not null)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary ms-2" @onclick="CancelEditFiche">Annuler</button>
+                                }
                             </div>
                         </div>
                     </EditForm>
@@ -296,13 +356,14 @@
                                 <th>Mois</th>
                                 <th class="text-end">Salaire net</th>
                                 <th class="text-end">Salaire brut</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             @if (_fichesAffichees.Count == 0)
                             {
                                 <tr>
-                                    <td colspan="3" class="text-muted text-center">Aucune fiche de paie enregistrée</td>
+                                    <td colspan="4" class="text-muted text-center">Aucune fiche de paie enregistrée</td>
                                 </tr>
                             }
                             else
@@ -313,6 +374,12 @@
                                         <td>@TravailFormat.Mois(fiche.Mois)</td>
                                         <td class="text-end">@TravailFormat.Euro(fiche.SalaireNet)</td>
                                         <td class="text-end">@TravailFormat.Euro(fiche.SalaireBrut)</td>
+                                        <td class="text-end text-nowrap">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+                                                    @onclick="() => StartEditFiche(fiche)">Modifier</button>
+                                            <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy"
+                                                    @onclick="() => _pendingDeleteFiche = fiche">Supprimer</button>
+                                        </td>
                                     </tr>
                                 }
                             }
@@ -343,14 +410,19 @@ else if (_ready)
     private bool _showConge;
     private bool _voirConges;
     private bool _historiqueComplet;
+    private int? _editHsId;
+    private int? _editFicheId;
     private string? _error;
     private Employeur? _employeur;
     private FichePaie? _derniereFiche;
+    private FichePaie? _pendingDeleteFiche;
+    private HeureSupplementaire? _pendingDeleteHs;
     private SoldeCongesInfo? _solde;
     private decimal _totalHs;
     private List<FichePaie> _fiches12 = [];
     private List<FichePaie> _fichesToutes = [];
     private List<Conge> _conges = [];
+    private List<HeureSupplementaire> _heuresSup = [];
     private IReadOnlyList<TravailSalaireNetChart.SalaireNetPoint> _pointsSalaire = [];
     private NewFicheModel _fiche = NewFicheModel.Create();
     private NewHsModel _hs = NewHsModel.Create();
@@ -380,10 +452,12 @@ else if (_ready)
 
         _derniereFiche = await Travail.DerniereFichePaieAsync(Id);
         _solde = await Travail.SoldeCongesActuel(Id, DateTime.Today.Year);
-        _totalHs = await Travail.TotalHeuresSupMoisEnCours(Id);
         _fiches12 = await Travail.ListerFiches12DerniersMois(Id);
         _fichesToutes = await Travail.ListerFichesPaie(Id);
         _conges = await Travail.ListerConges(Id);
+        var debutMois = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        _heuresSup = await Travail.ListerHeuresSup(Id, debutMois, debutMois.AddMonths(1).AddDays(-1));
+        _totalHs = await Travail.TotalHeuresSupMoisEnCours(Id);
         _pointsSalaire = BuildPointsSalaire(_fiches12);
     }
 
@@ -399,23 +473,32 @@ else if (_ready)
 
     private void TogglePaie()
     {
-        _showPaie = !_showPaie;
         if (_showPaie)
         {
-            _showHs = false;
-            _showConge = false;
+            CancelEditFiche();
+            return;
         }
+
+        _showPaie = true;
+        _showHs = false;
+        _showConge = false;
+        _editFicheId = null;
+        _fiche = NewFicheModel.Create();
     }
 
     private void ToggleHs()
     {
-        _showHs = !_showHs;
-        if (_showHs)
+        if (_showHs && _editHsId is null)
         {
-            _showPaie = false;
-            _showConge = false;
-            _hs = NewHsModel.Create();
+            CancelEditHs();
+            return;
         }
+
+        _showHs = true;
+        _showPaie = false;
+        _showConge = false;
+        _editHsId = null;
+        _hs = NewHsModel.Create();
     }
 
     private void ToggleConge()
@@ -436,6 +519,52 @@ else if (_ready)
         _conge.NombreJours = TravailCalendrier.CompterJoursOuvres(_conge.DateDebut, _conge.DateFin);
     }
 
+    private void StartEditHs(HeureSupplementaire hs)
+    {
+        _editHsId = hs.Id;
+        _showHs = true;
+        _showPaie = false;
+        _showConge = false;
+        _hs = new NewHsModel
+        {
+            Date = hs.Date,
+            DebutInput = hs.HeureDebut.ToString(@"hh\:mm"),
+            FinInput = hs.HeureFin.ToString(@"hh\:mm"),
+            Contexte = hs.Contexte
+        };
+    }
+
+    private void CancelEditHs()
+    {
+        _editHsId = null;
+        _showHs = false;
+        _hs = NewHsModel.Create();
+    }
+
+    private void StartEditFiche(FichePaie fiche)
+    {
+        _editFicheId = fiche.Id;
+        _showPaie = true;
+        _showHs = false;
+        _showConge = false;
+        _historiqueComplet = true;
+        _fiche = new NewFicheModel
+        {
+            MoisInput = $"{fiche.Mois.Year:D4}-{fiche.Mois.Month:D2}",
+            SalaireBrut = fiche.SalaireBrut,
+            SalaireNet = fiche.SalaireNet,
+            TotalCotisations = fiche.TotalCotisations,
+            Note = fiche.Note
+        };
+    }
+
+    private void CancelEditFiche()
+    {
+        _editFicheId = null;
+        _showPaie = false;
+        _fiche = NewFicheModel.Create();
+    }
+
     private async Task ToggleHistoriqueComplet()
     {
         _historiqueComplet = !_historiqueComplet;
@@ -445,7 +574,7 @@ else if (_ready)
         }
     }
 
-    private async Task CreateHsAsync()
+    private async Task SaveHsAsync()
     {
         if (!_hs.TryParseTimes(out var debut, out var fin))
         {
@@ -453,30 +582,40 @@ else if (_ready)
             return;
         }
 
-        _busy = true;
-        _error = null;
-        try
+        await RunAsync(async () =>
         {
-            await Travail.AjouterHeureSup(new HeureSupplementaire
+            var model = new HeureSupplementaire
             {
+                Id = _editHsId ?? 0,
                 EmployeurId = Id,
                 Date = _hs.Date,
                 HeureDebut = debut,
                 HeureFin = fin,
                 Contexte = _hs.Contexte
-            });
-            _totalHs = await Travail.TotalHeuresSupMoisEnCours(Id);
-            _hs = NewHsModel.Create();
-            _showHs = false;
-        }
-        catch (Exception ex)
+            };
+            if (_editHsId is int)
+            {
+                await Travail.ModifierHeureSup(model);
+            }
+            else
+            {
+                await Travail.AjouterHeureSup(model);
+            }
+
+            CancelEditHs();
+        });
+    }
+
+    private async Task ConfirmDeleteHsAsync()
+    {
+        if (_pendingDeleteHs is null)
         {
-            _error = ex.Message;
+            return;
         }
-        finally
-        {
-            _busy = false;
-        }
+
+        var id = _pendingDeleteHs.Id;
+        _pendingDeleteHs = null;
+        await RunAsync(() => Travail.SupprimerHeureSup(id));
     }
 
     private async Task CreateCongeAsync()
@@ -498,7 +637,7 @@ else if (_ready)
         });
     }
 
-    private async Task CreateFicheAsync()
+    private async Task SaveFicheAsync()
     {
         if (!DateTime.TryParse(_fiche.MoisInput + "-01", out var mois))
         {
@@ -508,8 +647,9 @@ else if (_ready)
 
         await RunAsync(async () =>
         {
-            await Travail.AjouterFichePaie(new FichePaie
+            var model = new FichePaie
             {
+                Id = _editFicheId ?? 0,
                 EmployeurId = Id,
                 Mois = mois,
                 SalaireBrut = _fiche.SalaireBrut,
@@ -517,10 +657,30 @@ else if (_ready)
                 TotalCotisations = _fiche.TotalCotisations,
                 DateEmission = DateTime.Now,
                 Note = _fiche.Note
-            });
-            _fiche = NewFicheModel.Create();
-            _showPaie = false;
+            };
+            if (_editFicheId is int)
+            {
+                await Travail.ModifierFichePaie(model);
+            }
+            else
+            {
+                await Travail.AjouterFichePaie(model);
+            }
+
+            CancelEditFiche();
         });
+    }
+
+    private async Task ConfirmDeleteFicheAsync()
+    {
+        if (_pendingDeleteFiche is null)
+        {
+            return;
+        }
+
+        var id = _pendingDeleteFiche.Id;
+        _pendingDeleteFiche = null;
+        await RunAsync(() => Travail.SupprimerFichePaie(id));
     }
 
     private async Task ChangerStatutAsync(int congeId, StatutConge statut) =>

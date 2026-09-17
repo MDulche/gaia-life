@@ -129,6 +129,13 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Types qui consomment le solde de congés payés (<see cref="SoldeConges.JoursAcquis"/>).
+    /// Seul <see cref="TypeConge.Paye"/> est déduit : Maladie et SansSolde restent dans l'historique
+    /// et le camembert mais ne réduisent jamais ce solde. RTT est exclu (compteur distinct non géré ici).
+    /// </summary>
+    public static bool TypeConsommeSolde(TypeConge type) => type == TypeConge.Paye;
+
     public async Task<decimal> TotalHeuresSupMoisEnCours(int employeurId, CancellationToken cancellationToken = default)
     {
         var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
@@ -180,6 +187,83 @@ public sealed class TravailService
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureEmployeurExistsAsync(db, heure.EmployeurId, cancellationToken);
         db.HeuresSupplementaires.Add(heure);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ModifierHeureSup(HeureSupplementaire heure, CancellationToken cancellationToken = default)
+    {
+        ValiderHeureSup(heure);
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await db.HeuresSupplementaires.FirstOrDefaultAsync(h => h.Id == heure.Id, cancellationToken)
+            ?? throw new InvalidOperationException("Heure supplémentaire introuvable.");
+
+        if (existing.EmployeurId != heure.EmployeurId)
+        {
+            throw new InvalidOperationException("L'employeur ne peut pas être modifié.");
+        }
+
+        existing.Date = heure.Date.Date;
+        existing.HeureDebut = heure.HeureDebut;
+        existing.HeureFin = heure.HeureFin;
+        existing.Contexte = heure.Contexte.Trim();
+        existing.DureeCalculee = decimal.Round(
+            (decimal)(heure.HeureFin - heure.HeureDebut).TotalHours,
+            2);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SupprimerHeureSup(int id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await db.HeuresSupplementaires.FirstOrDefaultAsync(h => h.Id == id, cancellationToken);
+        if (existing is null)
+        {
+            return;
+        }
+
+        db.HeuresSupplementaires.Remove(existing);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ModifierFichePaie(FichePaie fiche, CancellationToken cancellationToken = default)
+    {
+        ValiderFichePaie(fiche);
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await db.FichePaies.FirstOrDefaultAsync(f => f.Id == fiche.Id, cancellationToken)
+            ?? throw new InvalidOperationException("Fiche de paie introuvable.");
+
+        if (existing.EmployeurId != fiche.EmployeurId)
+        {
+            throw new InvalidOperationException("L'employeur ne peut pas être modifié.");
+        }
+
+        var conflit = await db.FichePaies.AnyAsync(
+            f => f.EmployeurId == fiche.EmployeurId && f.Mois == fiche.Mois && f.Id != fiche.Id,
+            cancellationToken);
+        if (conflit)
+        {
+            throw new InvalidOperationException("Une fiche de paie existe déjà pour ce mois.");
+        }
+
+        existing.Mois = fiche.Mois;
+        existing.SalaireBrut = fiche.SalaireBrut;
+        existing.SalaireNet = fiche.SalaireNet;
+        existing.TotalCotisations = fiche.TotalCotisations;
+        existing.Note = fiche.Note;
+        existing.DateEmission = fiche.DateEmission == default ? existing.DateEmission : fiche.DateEmission;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SupprimerFichePaie(int id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await db.FichePaies.FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
+        if (existing is null)
+        {
+            return;
+        }
+
+        db.FichePaies.Remove(existing);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -237,13 +321,18 @@ public sealed class TravailService
         if (nouveauStatut == StatutConge.Valide)
         {
             await EnsurePasDeChevauchementAsync(db, conge, cancellationToken);
+            await EnsureSoldeSuffisantPourValidationAsync(db, conge, cancellationToken);
         }
 
         conge.Statut = nouveauStatut;
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Reste = jours acquis − somme des <see cref="Conge.NombreJours"/> validés dont <c>DateDebut</c> est dans l'année.</summary>
+    /// <summary>
+    /// Reste = jours acquis − portion des congés <see cref="TypeConge.Paye"/> validés
+    /// qui tombe réellement dans l'année (répartition si le congé chevauche deux années civiles).
+    /// Maladie / SansSolde / RTT : jamais déduits (voir <see cref="TypeConsommeSolde"/>).
+    /// </summary>
     public async Task<SoldeCongesInfo> SoldeCongesActuel(int employeurId, int annee, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -513,11 +602,83 @@ public sealed class TravailService
         int annee,
         CancellationToken cancellationToken)
     {
-        return await db.Conges.AsNoTracking()
+        var yearStart = new DateTime(annee, 1, 1);
+        var yearEnd = new DateTime(annee, 12, 31);
+        var conges = await db.Conges.AsNoTracking()
             .Where(c => c.EmployeurId == employeurId
                 && c.Statut == StatutConge.Valide
-                && c.DateDebut.Year == annee)
-            .SumAsync(c => c.NombreJours, cancellationToken);
+                && c.Type == TypeConge.Paye
+                && c.DateDebut <= yearEnd
+                && c.DateFin >= yearStart)
+            .ToListAsync(cancellationToken);
+
+        return decimal.Round(conges.Sum(c => JoursConsommesDansAnnee(c, annee)), 2);
+    }
+
+    /// <summary>
+    /// Portion de <see cref="Conge.NombreJours"/> attribuée à une année civile, au prorata des
+    /// jours ouvrés (lun–ven) de l'intersection [DateDebut, DateFin] ∩ année.
+    /// </summary>
+    internal static decimal JoursConsommesDansAnnee(Conge conge, int annee)
+    {
+        if (!TypeConsommeSolde(conge.Type))
+        {
+            return 0;
+        }
+
+        var yearStart = new DateTime(annee, 1, 1);
+        var yearEnd = new DateTime(annee, 12, 31);
+        var debut = conge.DateDebut.Date;
+        var fin = conge.DateFin.Date;
+        if (fin < yearStart || debut > yearEnd)
+        {
+            return 0;
+        }
+
+        var totalOuvres = TravailCalendrier.CompterJoursOuvres(debut, fin);
+        var portionDebut = debut > yearStart ? debut : yearStart;
+        var portionFin = fin < yearEnd ? fin : yearEnd;
+        var portionOuvres = TravailCalendrier.CompterJoursOuvres(portionDebut, portionFin);
+
+        if (totalOuvres <= 0)
+        {
+            return debut.Year == annee ? conge.NombreJours : 0;
+        }
+
+        return decimal.Round(conge.NombreJours * (portionOuvres / totalOuvres), 2);
+    }
+
+    private static async Task EnsureSoldeSuffisantPourValidationAsync(
+        TravailDbContext db,
+        Conge conge,
+        CancellationToken cancellationToken)
+    {
+        if (!TypeConsommeSolde(conge.Type))
+        {
+            return;
+        }
+
+        var fr = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+        for (var annee = conge.DateDebut.Year; annee <= conge.DateFin.Year; annee++)
+        {
+            var demande = JoursConsommesDansAnnee(conge, annee);
+            if (demande <= 0)
+            {
+                continue;
+            }
+
+            var soldeRow = await db.SoldeConges.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.EmployeurId == conge.EmployeurId && s.Annee == annee, cancellationToken);
+            var acquis = soldeRow?.JoursAcquis ?? 0;
+            var dejaPris = await JoursPrisValidesAsync(db, conge.EmployeurId, annee, cancellationToken);
+            var disponible = acquis - dejaPris;
+            if (demande > disponible)
+            {
+                throw new InvalidOperationException(
+                    $"Solde insuffisant pour {annee} : {disponible.ToString("0.##", fr)} j disponibles, " +
+                    $"{demande.ToString("0.##", fr)} j demandés (congés payés uniquement).");
+            }
+        }
     }
 
     private static async Task EnsurePasDeChevauchementAsync(
@@ -529,7 +690,7 @@ public sealed class TravailService
         var fin = conge.DateFin.Date;
         var chevauche = await db.Conges.AsNoTracking()
             .Where(c => c.EmployeurId == conge.EmployeurId
-                && c.Statut == StatutConge.Valide
+                && (c.Statut == StatutConge.Valide || c.Statut == StatutConge.EnAttente)
                 && c.Id != conge.Id
                 && c.DateDebut <= fin
                 && c.DateFin >= debut)
@@ -538,8 +699,11 @@ public sealed class TravailService
 
         if (chevauche is not null)
         {
+            var libelle = chevauche.Statut == StatutConge.EnAttente
+                ? "une demande déjà en attente"
+                : "un congé déjà validé";
             throw new InvalidOperationException(
-                $"Ce congé chevauche un congé déjà validé du {chevauche.DateDebut:d} au {chevauche.DateFin:d}.");
+                $"Cette période chevauche {libelle} du {chevauche.DateDebut:d} au {chevauche.DateFin:d}.");
         }
     }
 
