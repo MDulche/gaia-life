@@ -443,6 +443,14 @@ FodyWeavers.xsd
 # Logs locaux du script d'émulateur Android (scripts/run-emulator.ps1)
 scripts/.emulator-logs/
 
+# Logs locaux du script téléphone physique (scripts/run-device.ps1)
+scripts/.device-logs/
+
+# Keystore / secrets de signature Android locaux (jamais commités)
+secrets/android/
+*.jks
+*.keystore
+
 ##
 ## Visual studio for Mac
 ##
