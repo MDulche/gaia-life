@@ -1,0 +1,265 @@
+@* Grille calendrier mensuel : congés, fériés, week-ends, ponts optimisés, pastille heures sup. *@
+@using System.Globalization
+@inject TravailService Travail
+
+<div class="travail-planning">
+    <div class="travail-planning-nav">
+        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+                aria-label="Mois précédent" @onclick="MoisPrecedentAsync">
+            <i class="bi bi-chevron-left" aria-hidden="true"></i>
+        </button>
+        <div class="travail-planning-title">
+            <span class="travail-planning-month">@TravailFormat.Mois(_moisAffiche)</span>
+            <button type="button" class="btn btn-link btn-sm py-0" disabled="@_busy" @onclick="AujourdHuiAsync">
+                Aujourd'hui
+            </button>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+                aria-label="Mois suivant" @onclick="MoisSuivantAsync">
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+        </button>
+    </div>
+
+    @if (_jours.Count == 0 && !_busy)
+    {
+        <p class="text-muted mb-0">Aucun jour à afficher.</p>
+    }
+    else
+    {
+        <div class="travail-planning-grid" role="grid" aria-label="@($"Planning {TravailFormat.Mois(_moisAffiche)}")">
+            @foreach (var libelle in _joursSemaine)
+            {
+                <div class="travail-planning-weekday" role="columnheader">@libelle</div>
+            }
+
+            @foreach (var cellule in _cellules)
+            {
+                if (!cellule.EstDuMois)
+                {
+                    <div class="travail-planning-day travail-planning-day-muted" aria-hidden="true">
+                        <span class="travail-planning-day-num">@cellule.Date.Day</span>
+                    </div>
+                }
+                else
+                {
+                    var jour = cellule.Jour!;
+                    var style = string.IsNullOrEmpty(jour.Couleur) ? null : $"background:{jour.Couleur}";
+                    var selected = _selection?.Date == jour.Date;
+                    var weekendClass = jour.Statut == StatutJourPlanning.Weekend ? "is-weekend" : null;
+                    <button type="button"
+                            class="travail-planning-day @(selected ? "is-selected" : null) @(EstAujourdhui(jour.Date) ? "is-today" : null) @weekendClass"
+                            style="@style"
+                            aria-label="@AriaLabel(jour)"
+                            aria-expanded="@selected"
+                            @onclick="() => ToggleSelection(jour)">
+                        <span class="travail-planning-day-num">@jour.Date.Day</span>
+                        @if (jour.HeureSupPresente)
+                        {
+                            <span class="travail-planning-hs" title="Heures supplémentaires"></span>
+                        }
+                    </button>
+                }
+            }
+        </div>
+
+        @if (_selection is not null)
+        {
+            <div class="travail-planning-popover" role="status">
+                <p class="travail-planning-popover-date mb-1">@_selection.Date.ToString("dddd d MMMM yyyy", French)</p>
+                @foreach (var ligne in DetailLignes(_selection))
+                {
+                    <p class="mb-0 small">@ligne</p>
+                }
+            </div>
+        }
+
+        <ul class="travail-planning-legend list-unstyled mb-0">
+            @foreach (var item in _legende)
+            {
+                <li>
+                    <span class="travail-planning-swatch" style="background:@item.Couleur"></span>
+                    @item.Libelle
+                </li>
+            }
+            <li>
+                <span class="travail-planning-hs travail-planning-hs-legend"></span>
+                Heures supplémentaires
+            </li>
+            <li>
+                <span class="travail-planning-swatch travail-planning-swatch-weekend"></span>
+                Week-end
+            </li>
+        </ul>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");
+    private static readonly string[] _joursSemaine = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+    [Parameter]
+    public int EmployeurId { get; set; }
+
+    /// <summary>Incrémenté par la page parente après une saisie pour forcer le rechargement.</summary>
+    [Parameter]
+    public int RefreshToken { get; set; }
+
+    private bool _busy;
+    private DateTime _moisAffiche = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private IReadOnlyList<JourPlanning> _jours = [];
+    private List<Cellule> _cellules = [];
+    private JourPlanning? _selection;
+    private List<LegendeItem> _legende = [];
+    private Dictionary<TypeConge, string> _couleurs = [];
+    private int _lastEmployeurId;
+    private int _lastRefreshToken = int.MinValue;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (EmployeurId == _lastEmployeurId && RefreshToken == _lastRefreshToken && _jours.Count > 0)
+        {
+            return;
+        }
+
+        _lastEmployeurId = EmployeurId;
+        _lastRefreshToken = RefreshToken;
+        await ChargerAsync();
+    }
+
+    private async Task MoisPrecedentAsync()
+    {
+        _moisAffiche = _moisAffiche.AddMonths(-1);
+        _selection = null;
+        await ChargerAsync();
+    }
+
+    private async Task MoisSuivantAsync()
+    {
+        _moisAffiche = _moisAffiche.AddMonths(1);
+        _selection = null;
+        await ChargerAsync();
+    }
+
+    private async Task AujourdHuiAsync()
+    {
+        _moisAffiche = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        _selection = null;
+        await ChargerAsync();
+    }
+
+    private async Task ChargerAsync()
+    {
+        if (EmployeurId <= 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var couleurs = await Travail.ListerCouleursTypesAsync();
+            _couleurs = couleurs.ToDictionary(c => c.Type, c => c.Couleur);
+            _jours = await Travail.ObtenirPlanning(EmployeurId, _moisAffiche.Month, _moisAffiche.Year);
+            _cellules = ConstruireGrille(_jours, _moisAffiche);
+            _legende = ConstruireLegende();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ToggleSelection(JourPlanning jour)
+    {
+        _selection = _selection?.Date == jour.Date ? null : jour;
+    }
+
+    private static bool EstAujourdhui(DateTime date) => date.Date == DateTime.Today;
+
+    private static List<Cellule> ConstruireGrille(IReadOnlyList<JourPlanning> jours, DateTime mois)
+    {
+        var parDate = jours.ToDictionary(j => j.Date.Date);
+        var premier = new DateTime(mois.Year, mois.Month, 1);
+        var debutGrille = premier.AddDays(-DecalageLundi(premier.DayOfWeek));
+        var dernier = premier.AddMonths(1).AddDays(-1);
+        var finGrille = dernier.AddDays(6 - DecalageLundi(dernier.DayOfWeek));
+
+        var cellules = new List<Cellule>();
+        for (var d = debutGrille; d <= finGrille; d = d.AddDays(1))
+        {
+            var estDuMois = d.Month == mois.Month;
+            parDate.TryGetValue(d.Date, out var jour);
+            cellules.Add(new Cellule(d, estDuMois, jour));
+        }
+
+        return cellules;
+    }
+
+    /// <summary>0 = lundi … 6 = dimanche.</summary>
+    private static int DecalageLundi(DayOfWeek dow) =>
+        dow == DayOfWeek.Sunday ? 6 : (int)dow - 1;
+
+    private List<LegendeItem> ConstruireLegende()
+    {
+        var items = new List<LegendeItem>
+        {
+            new("Jour férié", TravailCalendrier.CouleurJourFerie),
+            new("Congé opti (pont)", TravailCalendrier.CouleurCongeOpti)
+        };
+
+        foreach (TypeConge type in Enum.GetValues<TypeConge>())
+        {
+            var couleur = _couleurs.TryGetValue(type, out var c) ? c : "#0d6efd";
+            items.Add(new($"Congé {TravailFormat.Type(type).ToLowerInvariant()}", couleur));
+        }
+
+        return items;
+    }
+
+    private static string AriaLabel(JourPlanning jour)
+    {
+        var parts = DetailLignes(jour);
+        return $"{jour.Date.Day} — {string.Join(", ", parts)}";
+    }
+
+    private static IEnumerable<string> DetailLignes(JourPlanning jour)
+    {
+        if (jour.Statut == StatutJourPlanning.Conge && jour.TypeConge is TypeConge type)
+        {
+            yield return $"Congé {TravailFormat.Type(type).ToLowerInvariant()}";
+            if (!string.IsNullOrEmpty(jour.LibelleJourFerie))
+            {
+                yield return $"Jour férié : {jour.LibelleJourFerie}";
+            }
+        }
+        else if (jour.Statut == StatutJourPlanning.JourFerie)
+        {
+            yield return $"Jour férié : {jour.LibelleJourFerie ?? "férié"}";
+        }
+        else if (jour.Statut == StatutJourPlanning.CongeOpti)
+        {
+            yield return "Congé optimisé (pont suggéré)";
+        }
+        else if (jour.Statut == StatutJourPlanning.Weekend)
+        {
+            yield return "Week-end";
+        }
+        else
+        {
+            yield return "Jour ouvré";
+        }
+
+        foreach (var hs in jour.HeuresSup)
+        {
+            yield return
+                $"{TravailFormat.Heures(hs.Duree)} de sup — {FormatHeure(hs.HeureDebut)}-{FormatHeure(hs.HeureFin)} — {hs.Contexte}";
+        }
+    }
+
+    private static string FormatHeure(TimeSpan t) =>
+        $"{(int)t.TotalHours}h{(t.Minutes > 0 ? t.Minutes.ToString("00") : "")}";
+
+    private sealed record Cellule(DateTime Date, bool EstDuMois, JourPlanning? Jour);
+
+    private sealed record LegendeItem(string Libelle, string Couleur);
+}

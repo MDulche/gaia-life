@@ -142,6 +142,40 @@
                 </button>
             </div>
 
+            @if (_opportunites.Count > 0)
+            {
+                <WidgetCard Title="Opportunités de pont" Icon="bi-lightbulb">
+                    <ul class="list-unstyled travail-ponts-list mb-0">
+                        @foreach (var opp in _opportunites)
+                        {
+                            <li class="travail-ponts-item @(opp.DejaPlanifie ? "is-planned" : null)">
+                                <div class="travail-ponts-main">
+                                    <strong>@opp.LibelleJourFerie</strong>
+                                    <span class="text-muted">
+                                        — @FormatPlagePont(opp.JoursAPoser)
+                                        · @opp.JoursCongesNecessaires j posé@(opp.JoursCongesNecessaires > 1 ? "s" : "")
+                                        → @opp.JoursReposTotal j de repos
+                                        <span class="travail-ponts-ratio">(×@opp.Efficacite.ToString("0.##", CultureInfo.GetCultureInfo("fr-FR")))</span>
+                                    </span>
+                                </div>
+                                @if (opp.DejaPlanifie)
+                                {
+                                    <span class="badge text-bg-success">Déjà planifié</span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            disabled="@_busy"
+                                            @onclick="() => PoserPontAsync(opp)">
+                                        Poser ce congé
+                                    </button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </WidgetCard>
+            }
+
             @if (_showHs)
             {
                 <WidgetCard Title="@(_editHsId is int ? "Modifier les heures supplémentaires" : "Ajouter des heures supplémentaires")">
@@ -393,6 +427,12 @@
             </WidgetCard>
         </div>
     </div>
+
+    <div class="travail-planning-wrap mt-4">
+        <WidgetCard Title="Planning mensuel" Icon="bi-calendar3">
+            <TravailPlanningCalendrier EmployeurId="Id" RefreshToken="_planningRefresh" />
+        </WidgetCard>
+    </div>
 }
 else if (_ready)
 {
@@ -427,6 +467,8 @@ else if (_ready)
     private NewFicheModel _fiche = NewFicheModel.Create();
     private NewHsModel _hs = NewHsModel.Create();
     private NewCongeModel _conge = NewCongeModel.Create();
+    private int _planningRefresh;
+    private IReadOnlyList<OpportunitePont> _opportunites = [];
 
     private List<FichePaie> _fichesAffichees => _historiqueComplet ? _fichesToutes : _fiches12;
 
@@ -459,6 +501,24 @@ else if (_ready)
         _heuresSup = await Travail.ListerHeuresSup(Id, debutMois, debutMois.AddMonths(1).AddDays(-1));
         _totalHs = await Travail.TotalHeuresSupMoisEnCours(Id);
         _pointsSalaire = BuildPointsSalaire(_fiches12);
+        _opportunites = await Travail.ListerOpportunitesPontAsync(Id);
+        _planningRefresh++;
+    }
+
+    private static string FormatPlagePont(IReadOnlyList<DateTime> jours)
+    {
+        if (jours.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var fr = CultureInfo.GetCultureInfo("fr-FR");
+        if (jours.Count == 1)
+        {
+            return jours[0].ToString("d", fr);
+        }
+
+        return $"{jours[0].ToString("d", fr)} → {jours[^1].ToString("d", fr)}";
     }
 
     private static IReadOnlyList<TravailSalaireNetChart.SalaireNetPoint> BuildPointsSalaire(IEnumerable<FichePaie> fiches)
@@ -510,6 +570,28 @@ else if (_ready)
             _showHs = false;
             _conge = NewCongeModel.Create();
         }
+    }
+
+    private void PoserPontAsync(OpportunitePont opp)
+    {
+        if (opp.JoursAPoser.Count == 0)
+        {
+            return;
+        }
+
+        _showConge = true;
+        _showPaie = false;
+        _showHs = false;
+        var debut = opp.JoursAPoser[0];
+        var fin = opp.JoursAPoser[^1];
+        _conge = new NewCongeModel
+        {
+            Type = TypeConge.Paye,
+            DateDebut = debut,
+            DateFin = fin,
+            NombreJours = opp.JoursCongesNecessaires,
+            Commentaire = $"Pont — {opp.LibelleJourFerie}"
+        };
     }
 
     private void ToggleConsulterConges() => _voirConges = !_voirConges;

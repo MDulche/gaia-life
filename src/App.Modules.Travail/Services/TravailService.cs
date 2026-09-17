@@ -225,6 +225,183 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>Jours fériés français (métropole) pour l'année donnée.</summary>
+    public IReadOnlyList<JourFerieInfo> ObtenirJoursFeries(int annee) =>
+        TravailCalendrier.ObtenirJoursFeries(annee);
+
+    /// <summary>
+    /// Opportunités de pont de l'année, triées par efficacité décroissante
+    /// (jours de repos / jours de congé à poser).
+    /// </summary>
+    public IReadOnlyList<OpportunitePont> ObtenirOpportunitesPont(int annee) =>
+        TravailCalendrier.ObtenirOpportunitesPont(annee);
+
+    /// <summary>
+    /// Meilleures opportunités de pont pour l'employeur (année en cours, + suivante en fin d'année),
+    /// avec indicateur <see cref="OpportunitePont.DejaPlanifie"/> si un congé couvre exactement les jours à poser.
+    /// </summary>
+    public async Task<IReadOnlyList<OpportunitePont>> ListerOpportunitesPontAsync(
+        int employeurId,
+        int max = 5,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureEmployeurExistsAsync(db, employeurId, cancellationToken);
+
+        var annee = DateTime.Today.Year;
+        var opportunites = ObtenirOpportunitesPont(annee).ToList();
+        if (DateTime.Today.Month >= 10)
+        {
+            opportunites.AddRange(ObtenirOpportunitesPont(annee + 1));
+        }
+
+        var debutFen = opportunites.SelectMany(o => o.JoursAPoser).DefaultIfEmpty(DateTime.Today).Min();
+        var finFen = opportunites.SelectMany(o => o.JoursAPoser).DefaultIfEmpty(DateTime.Today).Max();
+
+        var conges = await db.Conges.AsNoTracking()
+            .Where(c => c.EmployeurId == employeurId
+                && (c.Statut == StatutConge.Valide || c.Statut == StatutConge.EnAttente)
+                && c.DateDebut <= finFen
+                && c.DateFin >= debutFen)
+            .ToListAsync(cancellationToken);
+
+        var enrichies = opportunites
+            .OrderByDescending(o => o.Efficacite)
+            .ThenBy(o => o.JoursAPoser[0])
+            .Select(o =>
+            {
+                var debut = o.JoursAPoser[0];
+                var fin = o.JoursAPoser[^1];
+                var deja = conges.Any(c =>
+                    c.DateDebut.Date == debut.Date && c.DateFin.Date == fin.Date);
+                return o with { DejaPlanifie = deja };
+            })
+            .Take(max)
+            .ToList();
+
+        return enrichies;
+    }
+
+    /// <summary>
+    /// Planning mensuel : un jour par date du mois, avec statut prioritaire
+    /// (Congé &gt; JourFerie &gt; Weekend &gt; CongeOpti &gt; Normal) et indicateur d'heures sup indépendant.
+    /// </summary>
+    public async Task<IReadOnlyList<JourPlanning>> ObtenirPlanning(
+        int employeurId,
+        int mois,
+        int annee,
+        CancellationToken cancellationToken = default)
+    {
+        if (mois is < 1 or > 12)
+        {
+            throw new ArgumentOutOfRangeException(nameof(mois), "Le mois doit être compris entre 1 et 12.");
+        }
+
+        var debutMois = new DateTime(annee, mois, 1);
+        var finMois = debutMois.AddMonths(1).AddDays(-1);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureEmployeurExistsAsync(db, employeurId, cancellationToken);
+
+        var feries = ObtenirJoursFeries(annee)
+            .Where(f => f.Date.Month == mois)
+            .ToDictionary(f => f.Date.Date, f => f.Libelle);
+
+        // Ponts de l'année affichée (+ années adjacentes pour les ponts en bordure de mois).
+        var joursOpti = new HashSet<DateTime>(
+            ObtenirOpportunitesPont(annee)
+                .SelectMany(o => o.JoursAPoser)
+                .Where(d => d.Year == annee && d.Month == mois));
+        if (mois == 1)
+        {
+            foreach (var d in ObtenirOpportunitesPont(annee - 1).SelectMany(o => o.JoursAPoser)
+                         .Where(d => d.Year == annee && d.Month == mois))
+            {
+                joursOpti.Add(d);
+            }
+        }
+        else if (mois == 12)
+        {
+            foreach (var d in ObtenirOpportunitesPont(annee + 1).SelectMany(o => o.JoursAPoser)
+                         .Where(d => d.Year == annee && d.Month == mois))
+            {
+                joursOpti.Add(d);
+            }
+        }
+
+        var conges = await db.Conges.AsNoTracking()
+            .Where(c => c.EmployeurId == employeurId
+                && (c.Statut == StatutConge.Valide || c.Statut == StatutConge.EnAttente)
+                && c.DateDebut <= finMois
+                && c.DateFin >= debutMois)
+            .OrderBy(c => c.DateDebut)
+            .ToListAsync(cancellationToken);
+
+        var heuresSup = await db.HeuresSupplementaires.AsNoTracking()
+            .Where(h => h.EmployeurId == employeurId
+                && h.Date >= debutMois
+                && h.Date < debutMois.AddMonths(1))
+            .OrderBy(h => h.HeureDebut)
+            .ToListAsync(cancellationToken);
+
+        await EnsureCouleursAsync(db, cancellationToken);
+        var couleurs = await db.CouleursTypes.AsNoTracking()
+            .ToDictionaryAsync(c => c.Type, c => c.Couleur, cancellationToken);
+
+        var jours = new List<JourPlanning>(finMois.Day);
+        for (var jour = debutMois; jour <= finMois; jour = jour.AddDays(1))
+        {
+            var date = jour.Date;
+            var congeDuJour = conges.FirstOrDefault(c => c.DateDebut.Date <= date && c.DateFin.Date >= date);
+            var hsDuJour = heuresSup
+                .Where(h => h.Date.Date == date)
+                .Select(h => new HeureSupPlanningInfo(h.HeureDebut, h.HeureFin, h.DureeCalculee, h.Contexte))
+                .ToList();
+
+            StatutJourPlanning statut;
+            TypeConge? typeConge = null;
+            string? libelleFerie = null;
+            string? couleur = null;
+
+            if (congeDuJour is not null)
+            {
+                statut = StatutJourPlanning.Conge;
+                typeConge = congeDuJour.Type;
+                couleurs.TryGetValue(congeDuJour.Type, out couleur);
+                feries.TryGetValue(date, out libelleFerie);
+            }
+            else if (feries.TryGetValue(date, out libelleFerie))
+            {
+                statut = StatutJourPlanning.JourFerie;
+                couleur = TravailCalendrier.CouleurJourFerie;
+            }
+            else if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            {
+                statut = StatutJourPlanning.Weekend;
+            }
+            else if (joursOpti.Contains(date))
+            {
+                statut = StatutJourPlanning.CongeOpti;
+                couleur = TravailCalendrier.CouleurCongeOpti;
+            }
+            else
+            {
+                statut = StatutJourPlanning.Normal;
+            }
+
+            jours.Add(new JourPlanning(
+                date,
+                statut,
+                typeConge,
+                libelleFerie,
+                hsDuJour.Count > 0,
+                couleur,
+                hsDuJour));
+        }
+
+        return jours;
+    }
+
     public async Task ModifierFichePaie(FichePaie fiche, CancellationToken cancellationToken = default)
     {
         ValiderFichePaie(fiche);
@@ -794,3 +971,33 @@ public sealed record ProjectionSoldeFinAnnee(
 
 /// <summary>Part du camembert (congés validés de l'année, par type).</summary>
 public sealed record TravailTypePart(string Type, decimal Jours, string? Couleur);
+
+/// <summary>Statut principal d'un jour sur le planning mensuel.</summary>
+public enum StatutJourPlanning
+{
+    Normal = 0,
+    Weekend = 1,
+    JourFerie = 2,
+    Conge = 3,
+    CongeOpti = 4
+}
+
+/// <summary>Heure supplémentaire affichée dans le détail d'un jour du planning.</summary>
+public sealed record HeureSupPlanningInfo(
+    TimeSpan HeureDebut,
+    TimeSpan HeureFin,
+    decimal Duree,
+    string Contexte);
+
+/// <summary>
+/// Jour du planning mensuel. <see cref="HeureSupPresente"/> est indépendant du
+/// <see cref="Statut"/> (priorité Congé &gt; JourFerie &gt; Weekend &gt; CongeOpti &gt; Normal).
+/// </summary>
+public sealed record JourPlanning(
+    DateTime Date,
+    StatutJourPlanning Statut,
+    TypeConge? TypeConge,
+    string? LibelleJourFerie,
+    bool HeureSupPresente,
+    string? Couleur,
+    IReadOnlyList<HeureSupPlanningInfo> HeuresSup);

@@ -636,6 +636,207 @@ hr {
     font-size: 0.7rem;
 }
 
+.travail-planning-wrap {
+    min-width: 0;
+}
+
+.travail-ponts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.travail-ponts-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.4rem;
+    background: var(--bs-body-bg);
+}
+
+.travail-ponts-item.is-planned {
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-ponts-main {
+    min-width: 0;
+    flex: 1 1 12rem;
+    font-size: 0.9rem;
+}
+
+.travail-ponts-ratio {
+    white-space: nowrap;
+}
+
+.travail-planning-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.travail-planning-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 0;
+}
+
+.travail-planning-month {
+    font-weight: 600;
+    text-transform: capitalize;
+    line-height: 1.2;
+}
+
+.travail-planning-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+}
+
+.travail-planning-weekday {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+    padding-bottom: 0.15rem;
+}
+
+.travail-planning-day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: 2.75rem;
+    padding: 0.3rem 0.35rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.35rem;
+    background: var(--bs-body-bg);
+    color: inherit;
+    text-align: left;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.travail-planning-day:hover {
+    border-color: var(--bs-primary);
+}
+
+.travail-planning-day.is-selected {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+}
+
+.travail-planning-day.is-weekend {
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-planning-day.is-today .travail-planning-day-num {
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+.travail-planning-day-muted {
+    opacity: 0.35;
+    pointer-events: none;
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-planning-day-num {
+    font-size: 0.85rem;
+}
+
+.travail-planning-hs {
+    position: absolute;
+    right: 0.3rem;
+    bottom: 0.3rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: #fd7e14;
+    box-shadow: 0 0 0 1px var(--bs-body-bg);
+}
+
+.travail-planning-hs-legend {
+    position: static;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.15rem;
+}
+
+.travail-planning-popover {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.4rem;
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-planning-popover-date {
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.travail-planning-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem 1rem;
+    margin-top: 0.85rem;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+}
+
+.travail-planning-legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.travail-planning-swatch {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 0.2rem;
+    border: 1px solid var(--bs-border-color);
+    flex-shrink: 0;
+}
+
+.travail-planning-swatch-weekend {
+    background: repeating-linear-gradient(
+        -45deg,
+        var(--bs-tertiary-bg),
+        var(--bs-tertiary-bg) 3px,
+        var(--bs-border-color) 3px,
+        var(--bs-border-color) 5px
+    );
+}
+
+@media (max-width: 575.98px) {
+    .travail-planning-grid {
+        gap: 0.2rem;
+    }
+
+    .travail-planning-day {
+        min-height: 2.35rem;
+        padding: 0.2rem 0.25rem;
+    }
+
+    .travail-planning-day-num {
+        font-size: 0.75rem;
+    }
+
+    .travail-planning-weekday {
+        font-size: 0.68rem;
+    }
+}
+
 @media (min-width: 768px) {
     .finance-dashboard {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
