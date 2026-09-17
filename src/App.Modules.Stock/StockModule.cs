@@ -7,6 +7,7 @@ using App.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace App.Modules.Stock;
 
@@ -31,11 +32,20 @@ public sealed class StockModule : IAppModule
         {
             var connectionString = sp.GetRequiredService<IConfiguration>().GetConnectionString("Default")
                 ?? throw new InvalidOperationException("La chaîne de connexion 'Default' est introuvable.");
-            GaiaMariaDb.Configure(options, connectionString);
+
+            if (IsSqliteConnectionString(connectionString))
+            {
+                options.UseStockSqlite(connectionString);
+            }
+            else
+            {
+                GaiaMariaDb.Configure(options, connectionString);
+            }
         });
         services.AddScoped<StockService>();
         services.AddScoped<IStockArticleCatalogue, StockArticleCatalogue>();
-        services.AddHostedService<ArticleAcheteStockSubscriber>();
+        services.AddSingleton<ArticleAcheteStockSubscriber>();
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<ArticleAcheteStockSubscriber>());
     }
 
     /// <summary>No-op si le module n'est pas enregistré (factory absente du DI).</summary>
@@ -51,4 +61,8 @@ public sealed class StockModule : IAppModule
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
         await db.Database.MigrateAsync(cancellationToken);
     }
+
+    private static bool IsSqliteConnectionString(string connectionString) =>
+        connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase)
+        || connectionString.Contains("Filename=", StringComparison.OrdinalIgnoreCase);
 }

@@ -1,6 +1,6 @@
 @page "/travail"
 @* Liste des employeurs (en cours vs terminés). Accès refusé si le module est inactif. *@
-@attribute [Authorize]
+<!-- Mobile : pas d'Authorize / Identity (mono-utilisateur, CONTRAT-MIGRATION-MOBILE.md). -->
 @inject TravailService Travail
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation

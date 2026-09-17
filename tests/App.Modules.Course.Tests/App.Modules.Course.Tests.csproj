@@ -12,7 +12,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.20" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.20" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.20" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
@@ -25,8 +24,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\App.Modules.Course\App.Modules.Course.csproj" />
-    <ProjectReference Include="..\..\src\App.Modules.Stock\App.Modules.Stock.csproj" />
-    <ProjectReference Include="..\..\src\App.Modules.Finance\App.Modules.Finance.csproj" />
     <ProjectReference Include="..\..\src\App.Shared\App.Shared.csproj" />
   </ItemGroup>
 

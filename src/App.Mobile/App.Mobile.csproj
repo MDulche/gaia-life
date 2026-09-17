@@ -37,10 +37,19 @@
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.9" />
+    <!-- Inclut AddInMemoryCollection (plus de package Memory séparé). -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.9" />
+    <!-- CVE-2025-6965 : forcer SQLite native à jour (pas le transitif 2.1.x). -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\App.Shared\App.Shared.csproj" />
+    <ProjectReference Include="..\App.Modules.Finance\App.Modules.Finance.csproj" />
+    <ProjectReference Include="..\App.Modules.Travail\App.Modules.Travail.csproj" />
+    <ProjectReference Include="..\App.Modules.Course\App.Modules.Course.csproj" />
+    <ProjectReference Include="..\App.Modules.Stock\App.Modules.Stock.csproj" />
   </ItemGroup>
 
 </Project>

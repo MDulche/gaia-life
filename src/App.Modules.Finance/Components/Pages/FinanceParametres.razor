@@ -1,0 +1,27 @@
+@page "/finance/parametres"
+@* Paramètres locaux Finance (remplace l'onglet Admin web — mono-utilisateur mobile). *@
+@using App.Modules.Finance.Components.Admin
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Paramètres Finances</PageTitle>
+
+@if (_ready)
+{
+    <p class="mb-1"><a href="/finance">← Finances</a></p>
+    <AdminFinanceSection />
+}
+
+@code {
+    private bool _ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await FinanceAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        _ready = true;
+    }
+}

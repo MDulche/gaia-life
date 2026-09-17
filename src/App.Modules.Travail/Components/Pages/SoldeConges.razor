@@ -1,6 +1,6 @@
 @page "/travail/employeurs/{Id:int}/solde-conges"
 @* Ancienne saisie des jours acquis : redirigée vers l'administration. *@
-@attribute [Authorize]
+<!-- Mobile : pas d'Authorize / Identity (mono-utilisateur, CONTRAT-MIGRATION-MOBILE.md). -->
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation
 

@@ -39,7 +39,7 @@
         _employeur = await Travail.GetEmployeurActifAsync();
         if (_employeur is not null)
         {
-            _solde = await Travail.SoldeCongesActuel(_employeur.Id, DateTime.Today.Year);
+            _solde = await Travail.SoldeCongesActuelAsync(_employeur.Id, DateTime.Today.Year);
             _fiche = await Travail.DerniereFichePaieAsync(_employeur.Id);
         }
 

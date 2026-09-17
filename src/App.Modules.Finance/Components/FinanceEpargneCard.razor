@@ -86,9 +86,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _total = await Finance.TotalEpargne();
-        _progression = await Finance.ProgressionObjectif();
-        _tendance = await Finance.TendanceVersementsEpargne();
+        _total = await Finance.TotalEpargneAsync();
+        _progression = await Finance.ProgressionObjectifAsync();
+        _tendance = await Finance.TendanceVersementsEpargneAsync();
         _loading = false;
     }
 }

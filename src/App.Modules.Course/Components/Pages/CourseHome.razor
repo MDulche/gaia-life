@@ -1,6 +1,6 @@
 @page "/course"
-@* Liste à gauche ; stats, jeu de données, parcours magasins (+ mouvements stock si liaison) à droite. *@
-@attribute [Authorize]
+@* Liste + stats + parcours magasins. Portage MAUI : pas d'Identity, deps optionnelles via stubs DI. *@
+@* Adaptation mobile : [Authorize] retiré — mono-utilisateur, pas d'Identity / SignalR auth (contrat migration). *@
 @using System.Globalization
 @using App.Shared.Modules
 @using Microsoft.JSInterop
@@ -17,7 +17,7 @@
 {
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <h1 class="h3 mb-0">Courses</h1>
-        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleHistorique">
+        <button type="button" class="btn btn-outline-secondary course-touch-btn" @onclick="ToggleHistorique">
             @(_historique ? "Retour à la liste" : "Voir les articles achetés")
         </button>
     </div>
@@ -35,27 +35,27 @@
                     <EditForm Model="_nouveau" OnValidSubmit="AjouterAsync">
                         <DataAnnotationsValidator />
                         <div class="row g-2 align-items-end mb-3">
-                            <div class="col-md-3">
+                            <div class="col-12 col-md-4">
                                 <label class="form-label" for="article-nom">Ajouter un article</label>
-                                <InputText id="article-nom" class="form-control form-control-sm" @bind-Value="_nouveau.Nom" />
+                                <InputText id="article-nom" class="form-control course-touch-input" @bind-Value="_nouveau.Nom" />
                                 <ValidationMessage For="() => _nouveau.Nom" />
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-md-2">
                                 <label class="form-label" for="article-qte">Quantité</label>
-                                <InputText id="article-qte" class="form-control form-control-sm" @bind-Value="_nouveau.Quantite" />
+                                <InputText id="article-qte" class="form-control course-touch-input" @bind-Value="_nouveau.Quantite" />
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-md-3">
                                 <label class="form-label" for="article-cat">Catégorie</label>
-                                <InputSelect id="article-cat" class="form-select form-select-sm" @bind-Value="_nouveau.CategorieId">
+                                <InputSelect id="article-cat" class="form-select course-touch-input" @bind-Value="_nouveau.CategorieId">
                                     @foreach (var categorie in _categories)
                                     {
                                         <option value="@categorie.Id">@categorie.Nom</option>
                                     }
                                 </InputSelect>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-6 col-md-2">
                                 <label class="form-label" for="article-mag">Magasin</label>
-                                <InputSelect id="article-mag" class="form-select form-select-sm" @bind-Value="_nouveau.MagasinId">
+                                <InputSelect id="article-mag" class="form-select course-touch-input" @bind-Value="_nouveau.MagasinId">
                                     <option value="0">—</option>
                                     @foreach (var magasin in _magasins)
                                     {
@@ -65,9 +65,9 @@
                             </div>
                             @if (_stockActif)
                             {
-                                <div class="col-md-2">
+                                <div class="col-6 col-md-2">
                                     <label class="form-label" for="article-stock">Article stock</label>
-                                    <InputSelect id="article-stock" class="form-select form-select-sm" @bind-Value="_nouveau.ArticleStockId">
+                                    <InputSelect id="article-stock" class="form-select course-touch-input" @bind-Value="_nouveau.ArticleStockId">
                                         <option value="0">—</option>
                                         @foreach (var stock in _articlesStock)
                                         {
@@ -78,29 +78,29 @@
                             }
                             @if (_financeActif)
                             {
-                                <div class="col-md-2">
+                                <div class="col-6 col-md-2">
                                     <label class="form-label" for="article-prix">Prix estimé</label>
-                                    <InputNumber id="article-prix" class="form-control form-control-sm" @bind-Value="_nouveau.PrixEstime" />
+                                    <InputNumber id="article-prix" class="form-control course-touch-input" @bind-Value="_nouveau.PrixEstime" />
                                 </div>
                             }
-                            <div class="col-md-1">
-                                <button type="submit" class="btn btn-primary btn-sm w-100" disabled="@(_busy || _categories.Count == 0)">Ajouter</button>
+                            <div class="col-12 col-md-2">
+                                <button type="submit" class="btn btn-primary course-touch-btn w-100" disabled="@(_busy || _categories.Count == 0)">Ajouter</button>
                             </div>
                         </div>
                     </EditForm>
                     @if (_categories.Count == 0)
                     {
-                        <p class="text-muted small">Créez une catégorie dans l'administration avant d'ajouter un article.</p>
+                        <p class="text-muted small">Ajoutez une catégorie (admin web archivé) ou créez-en une via le seed / paramètres locaux.</p>
                     }
                 }
 
                 <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
+                    <table class="table align-middle mb-0 course-table">
                         <thead>
                             <tr>
                                 @if (!_historique)
                                 {
-                                    <th><span class="visually-hidden">Acheté</span></th>
+                                    <th class="course-check-col"><span class="visually-hidden">Acheté</span></th>
                                 }
                                 <th>Nom</th>
                                 <th>Quantité</th>
@@ -117,7 +117,7 @@
                             @if (_lignes.Count == 0)
                             {
                                 <tr>
-                                    <td colspan="@(_historique ? 5 : 5)" class="text-muted text-center">
+                                    <td colspan="6" class="text-muted text-center py-3">
                                         @(_historique ? "Aucun article acheté pour le moment." : "Aucun article à acheter.")
                                     </td>
                                 </tr>
@@ -126,16 +126,19 @@
                             {
                                 @foreach (var article in _lignes)
                                 {
-                                    <tr>
+                                    <tr class="course-row">
                                         @if (!_historique)
                                         {
-                                            <td>
-                                                <input type="checkbox"
-                                                       class="form-check-input"
-                                                       disabled="@_busy"
-                                                       checked="@article.Achete"
-                                                       aria-label="@($"Marquer {article.Nom} comme acheté")"
-                                                       @onchange="e => MarquerAsync(article.Id, (bool)(e.Value ?? false))" />
+                                            <td class="course-check-col">
+                                                @* Zone tactile élargie pour cocher au doigt. *@
+                                                <label class="course-check-hit">
+                                                    <input type="checkbox"
+                                                           class="form-check-input course-check-input"
+                                                           disabled="@_busy"
+                                                           checked="@article.Achete"
+                                                           aria-label="@($"Marquer {article.Nom} comme acheté")"
+                                                           @onchange="e => MarquerAsync(article.Id, (bool)(e.Value ?? false))" />
+                                                </label>
                                             </td>
                                         }
                                         <td>
@@ -163,14 +166,14 @@
                                             @if (!_historique)
                                             {
                                                 <button type="button"
-                                                        class="btn btn-outline-secondary btn-sm"
+                                                        class="btn btn-outline-secondary course-touch-btn"
                                                         disabled="@_busy"
                                                         @onclick="() => StartEdit(article)">
                                                     Modifier
                                                 </button>
                                             }
                                             <button type="button"
-                                                    class="btn btn-outline-danger btn-sm"
+                                                    class="btn btn-outline-danger course-touch-btn"
                                                     disabled="@_busy"
                                                     @onclick="() => SupprimerAsync(article.Id, article.Nom)">
                                                 Supprimer
@@ -186,15 +189,15 @@
                                                     <div class="row g-2 align-items-end">
                                                         <div class="col-md-3">
                                                             <label class="form-label" for="edit-nom">Nom</label>
-                                                            <InputText id="edit-nom" class="form-control form-control-sm" @bind-Value="_edit.Nom" />
+                                                            <InputText id="edit-nom" class="form-control course-touch-input" @bind-Value="_edit.Nom" />
                                                         </div>
                                                         <div class="col-md-2">
                                                             <label class="form-label" for="edit-qte">Quantité</label>
-                                                            <InputText id="edit-qte" class="form-control form-control-sm" @bind-Value="_edit.Quantite" />
+                                                            <InputText id="edit-qte" class="form-control course-touch-input" @bind-Value="_edit.Quantite" />
                                                         </div>
                                                         <div class="col-md-2">
                                                             <label class="form-label" for="edit-cat">Catégorie</label>
-                                                            <InputSelect id="edit-cat" class="form-select form-select-sm" @bind-Value="_edit.CategorieId">
+                                                            <InputSelect id="edit-cat" class="form-select course-touch-input" @bind-Value="_edit.CategorieId">
                                                                 @foreach (var categorie in _categories)
                                                                 {
                                                                     <option value="@categorie.Id">@categorie.Nom</option>
@@ -203,7 +206,7 @@
                                                         </div>
                                                         <div class="col-md-2">
                                                             <label class="form-label" for="edit-mag">Magasin</label>
-                                                            <InputSelect id="edit-mag" class="form-select form-select-sm" @bind-Value="_edit.MagasinId">
+                                                            <InputSelect id="edit-mag" class="form-select course-touch-input" @bind-Value="_edit.MagasinId">
                                                                 <option value="0">—</option>
                                                                 @foreach (var magasin in _magasins)
                                                                 {
@@ -215,7 +218,7 @@
                                                         {
                                                             <div class="col-md-2">
                                                                 <label class="form-label" for="edit-stock">Article stock</label>
-                                                                <InputSelect id="edit-stock" class="form-select form-select-sm" @bind-Value="_edit.ArticleStockId">
+                                                                <InputSelect id="edit-stock" class="form-select course-touch-input" @bind-Value="_edit.ArticleStockId">
                                                                     <option value="0">—</option>
                                                                     @foreach (var stock in _articlesStock)
                                                                     {
@@ -228,12 +231,12 @@
                                                         {
                                                             <div class="col-md-2">
                                                                 <label class="form-label" for="edit-prix">Prix estimé</label>
-                                                                <InputNumber id="edit-prix" class="form-control form-control-sm" @bind-Value="_edit.PrixEstime" />
+                                                                <InputNumber id="edit-prix" class="form-control course-touch-input" @bind-Value="_edit.PrixEstime" />
                                                             </div>
                                                         }
                                                         <div class="col-auto">
-                                                            <button type="submit" class="btn btn-primary btn-sm" disabled="@_busy">Enregistrer</button>
-                                                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _editId = null">Annuler</button>
+                                                            <button type="submit" class="btn btn-primary course-touch-btn" disabled="@_busy">Enregistrer</button>
+                                                            <button type="button" class="btn btn-outline-secondary course-touch-btn" @onclick="() => _editId = null">Annuler</button>
                                                         </div>
                                                     </div>
                                                 </EditForm>
@@ -252,15 +255,6 @@
             <WidgetCard Title="Achats du mois">
                 <CoursePieChart Slices="_repartition" EmptyText="Aucun achat enregistré ce mois-ci." />
             </WidgetCard>
-
-            <div class="d-grid">
-                <button type="button"
-                        class="btn btn-outline-secondary"
-                        disabled
-                        title="Bientôt disponible">
-                    Jeu de données
-                </button>
-            </div>
 
             <WidgetCard Title="Ordre des magasins à suivre">
                 @if (_parcours.Count == 0)
@@ -337,12 +331,12 @@
     private async Task ReloadAsync()
     {
         _categories = await Course.ListerCategoriesAsync();
-        _magasins = await Course.ListerMagasinsOrdonnes();
+        _magasins = await Course.ListerMagasinsOrdonnesAsync();
         _parcours = await Course.ListerMagasinsAvecRestantsAsync();
-        _repartition = await Course.RepartitionParCategorie();
+        _repartition = await Course.RepartitionParCategorieAsync();
         _lignes = _historique
-            ? await Course.ListerArticlesAchetes()
-            : await Course.ListerArticlesAEnAcheter();
+            ? await Course.ListerArticlesAchetesAsync()
+            : await Course.ListerArticlesAEnAcheterAsync();
         _liaisonCourseStock = await Liaisons.IsLiaisonActiveAsync(CourseModule.ModuleKey, StockModuleKey);
         _liaisonCourseFinance = await Liaisons.IsLiaisonActiveAsync(CourseModule.ModuleKey, FinanceModuleKey);
         _stockActif = await ModuleGuard.IsModuleActiveAsync(StockModuleKey);
@@ -384,7 +378,8 @@
         _error = null;
         try
         {
-            await Course.MarquerAchete(id, valeur);
+            await Course.MarquerAcheteAsync(id, valeur);
+            // Mise à jour locale incrémentale (évite ReloadAsync complet à chaque coche).
             AppliquerMarquerLocal(id, valeur);
         }
         catch (Exception ex)
@@ -399,7 +394,7 @@
 
     /// <summary>
     /// Met à jour listes / parcours / camembert en mémoire après une coche réussie
-    /// (évite un ReloadAsync complet à chaque interaction).
+    /// (évite un ReloadAsync complet à chaque interaction — perf audit web).
     /// </summary>
     private void AppliquerMarquerLocal(int id, bool valeur)
     {
@@ -501,13 +496,14 @@
 
     private async Task SupprimerAsync(int id, string nom)
     {
+        // Adaptation mobile : window.confirm via WebView (pas de dialoge MAUI natif pour rester partagé avec le Razor).
         var ok = await Js.InvokeAsync<bool>("confirm", $"Supprimer « {nom} » ?");
         if (!ok)
         {
             return;
         }
 
-        await RunAsync(() => Course.SupprimerArticle(id));
+        await RunAsync(() => Course.SupprimerArticleAsync(id));
     }
 
     private void StartEdit(ArticleCourse article)
@@ -534,7 +530,7 @@
 
         await RunAsync(async () =>
         {
-            await Course.ModifierArticle(new ArticleCourse
+            await Course.ModifierArticleAsync(new ArticleCourse
             {
                 Id = id,
                 Nom = _edit.Nom,
@@ -552,7 +548,7 @@
     {
         await RunAsync(async () =>
         {
-            await Course.AjouterArticle(new ArticleCourse
+            await Course.AjouterArticleAsync(new ArticleCourse
             {
                 Nom = _nouveau.Nom,
                 Quantite = _nouveau.Quantite,

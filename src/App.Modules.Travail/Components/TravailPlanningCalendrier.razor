@@ -1,20 +1,21 @@
 @* Grille calendrier mensuel : congés, fériés, week-ends, ponts optimisés, pastille heures sup. *@
+@* Tactile : classes travail-touch-* (cible min 44px déjà en CSS mobile). *@
 @using System.Globalization
 @inject TravailService Travail
 
 <div class="travail-planning">
     <div class="travail-planning-nav">
-        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+        <button type="button" class="btn btn-outline-secondary btn-sm travail-touch-btn" disabled="@_busy"
                 aria-label="Mois précédent" @onclick="MoisPrecedentAsync">
             <i class="bi bi-chevron-left" aria-hidden="true"></i>
         </button>
         <div class="travail-planning-title">
             <span class="travail-planning-month">@TravailFormat.Mois(_moisAffiche)</span>
-            <button type="button" class="btn btn-link btn-sm py-0" disabled="@_busy" @onclick="AujourdHuiAsync">
+            <button type="button" class="btn btn-link btn-sm py-0 travail-touch-btn" disabled="@_busy" @onclick="AujourdHuiAsync">
                 Aujourd'hui
             </button>
         </div>
-        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+        <button type="button" class="btn btn-outline-secondary btn-sm travail-touch-btn" disabled="@_busy"
                 aria-label="Mois suivant" @onclick="MoisSuivantAsync">
             <i class="bi bi-chevron-right" aria-hidden="true"></i>
         </button>
@@ -46,8 +47,9 @@
                     var style = string.IsNullOrEmpty(jour.Couleur) ? null : $"background:{jour.Couleur}";
                     var selected = _selection?.Date == jour.Date;
                     var weekendClass = jour.Statut == StatutJourPlanning.Weekend ? "is-weekend" : null;
+                    @* Jour cliquable : travail-touch-day pour cible tactile (min 44px en CSS). *@
                     <button type="button"
-                            class="travail-planning-day @(selected ? "is-selected" : null) @(EstAujourdhui(jour.Date) ? "is-today" : null) @weekendClass"
+                            class="travail-planning-day travail-touch-day @(selected ? "is-selected" : null) @(EstAujourdhui(jour.Date) ? "is-today" : null) @weekendClass"
                             style="@style"
                             aria-label="@AriaLabel(jour)"
                             aria-expanded="@selected"
@@ -159,7 +161,7 @@
         {
             var couleurs = await Travail.ListerCouleursTypesAsync();
             _couleurs = couleurs.ToDictionary(c => c.Type, c => c.Couleur);
-            _jours = await Travail.ObtenirPlanning(EmployeurId, _moisAffiche.Month, _moisAffiche.Year);
+            _jours = await Travail.ObtenirPlanningAsync(EmployeurId, _moisAffiche.Month, _moisAffiche.Year);
             _cellules = ConstruireGrille(_jours, _moisAffiche);
             _legende = ConstruireLegende();
         }

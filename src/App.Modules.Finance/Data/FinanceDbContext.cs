@@ -4,11 +4,19 @@ using Microsoft.EntityFrameworkCore;
 namespace App.Modules.Finance.Data;
 
 /// <summary>
-/// Contexte métier Finances. Uniquement via <c>IDbContextFactory</c> (pas de Scoped Identity).
+/// Contexte métier Finances. Uniquement via <c>IDbContextFactory</c>.
+/// Migrations MariaDB historiques : <c>Data/Migrations/</c> (archive web).
+/// Migrations SQLite mobile : <c>Migrations/Sqlite/</c> via <see cref="FinanceSqliteDbContext"/>.
 /// </summary>
 public class FinanceDbContext : DbContext
 {
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options)
+        : base(options)
+    {
+    }
+
+    /// <summary>Constructeur pour contextes dérivés (ex. SQLite design-time / migrate).</summary>
+    protected FinanceDbContext(DbContextOptions options)
         : base(options)
     {
     }

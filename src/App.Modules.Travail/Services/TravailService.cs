@@ -1,6 +1,5 @@
 using App.Modules.Travail.Data;
 using App.Modules.Travail.Entities;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace App.Modules.Travail.Services;
@@ -11,18 +10,11 @@ namespace App.Modules.Travail.Services;
 /// </summary>
 public sealed class TravailService
 {
-    /// <summary>Nom du rôle Identity autorisé à valider / refuser un congé.</summary>
-    public const string RoleAdmin = "Admin";
-
     private readonly IDbContextFactory<TravailDbContext> _dbFactory;
-    private readonly AuthenticationStateProvider _authenticationStateProvider;
 
-    public TravailService(
-        IDbContextFactory<TravailDbContext> dbFactory,
-        AuthenticationStateProvider authenticationStateProvider)
+    public TravailService(IDbContextFactory<TravailDbContext> dbFactory)
     {
         _dbFactory = dbFactory;
-        _authenticationStateProvider = authenticationStateProvider;
     }
 
     public async Task<List<Employeur>> ListerEmployeursAsync(CancellationToken cancellationToken = default)
@@ -92,7 +84,7 @@ public sealed class TravailService
         return employeur;
     }
 
-    public async Task<List<FichePaie>> ListerFichesPaie(int employeurId, CancellationToken cancellationToken = default)
+    public async Task<List<FichePaie>> ListerFichesPaieAsync(int employeurId, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.FichePaies.AsNoTracking()
@@ -111,7 +103,7 @@ public sealed class TravailService
     }
 
     /// <summary>Refuse si le net dépasse le brut, ou si une fiche existe déjà pour le même mois.</summary>
-    public async Task AjouterFichePaie(FichePaie fiche, CancellationToken cancellationToken = default)
+    public async Task AjouterFichePaieAsync(FichePaie fiche, CancellationToken cancellationToken = default)
     {
         ValiderFichePaie(fiche);
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -136,7 +128,7 @@ public sealed class TravailService
     /// </summary>
     public static bool TypeConsommeSolde(TypeConge type) => type == TypeConge.Paye;
 
-    public async Task<decimal> TotalHeuresSupMoisEnCours(int employeurId, CancellationToken cancellationToken = default)
+    public async Task<decimal> TotalHeuresSupMoisEnCoursAsync(int employeurId, CancellationToken cancellationToken = default)
     {
         var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         var fin = debut.AddMonths(1);
@@ -147,7 +139,7 @@ public sealed class TravailService
         return decimal.Round(total, 2);
     }
 
-    public async Task<List<HeureSupplementaire>> ListerHeuresSup(
+    public async Task<List<HeureSupplementaire>> ListerHeuresSupAsync(
         int employeurId,
         DateTime? debut = null,
         DateTime? fin = null,
@@ -175,7 +167,7 @@ public sealed class TravailService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task AjouterHeureSup(HeureSupplementaire heure, CancellationToken cancellationToken = default)
+    public async Task AjouterHeureSupAsync(HeureSupplementaire heure, CancellationToken cancellationToken = default)
     {
         ValiderHeureSup(heure);
         heure.Date = heure.Date.Date;
@@ -190,7 +182,7 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task ModifierHeureSup(HeureSupplementaire heure, CancellationToken cancellationToken = default)
+    public async Task ModifierHeureSupAsync(HeureSupplementaire heure, CancellationToken cancellationToken = default)
     {
         ValiderHeureSup(heure);
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -212,7 +204,7 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SupprimerHeureSup(int id, CancellationToken cancellationToken = default)
+    public async Task SupprimerHeureSupAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var existing = await db.HeuresSupplementaires.FirstOrDefaultAsync(h => h.Id == id, cancellationToken);
@@ -286,7 +278,7 @@ public sealed class TravailService
     /// Planning mensuel : un jour par date du mois, avec statut prioritaire
     /// (Congé &gt; JourFerie &gt; Weekend &gt; CongeOpti &gt; Normal) et indicateur d'heures sup indépendant.
     /// </summary>
-    public async Task<IReadOnlyList<JourPlanning>> ObtenirPlanning(
+    public async Task<IReadOnlyList<JourPlanning>> ObtenirPlanningAsync(
         int employeurId,
         int mois,
         int annee,
@@ -402,7 +394,7 @@ public sealed class TravailService
         return jours;
     }
 
-    public async Task ModifierFichePaie(FichePaie fiche, CancellationToken cancellationToken = default)
+    public async Task ModifierFichePaieAsync(FichePaie fiche, CancellationToken cancellationToken = default)
     {
         ValiderFichePaie(fiche);
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -431,7 +423,7 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SupprimerFichePaie(int id, CancellationToken cancellationToken = default)
+    public async Task SupprimerFichePaieAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var existing = await db.FichePaies.FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
@@ -444,7 +436,7 @@ public sealed class TravailService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<Conge>> ListerConges(
+    public async Task<List<Conge>> ListerCongesAsync(
         int employeurId,
         StatutConge? filtreStatut = null,
         CancellationToken cancellationToken = default)
@@ -462,25 +454,32 @@ public sealed class TravailService
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>Crée une demande en <see cref="StatutConge.EnAttente"/>. Échoue si chevauchement avec un congé validé.</summary>
-    public async Task DemanderConge(Conge conge, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Crée un congé immédiatement validé (<see cref="StatutConge.Valide"/>).
+    /// Mode mobile mono-utilisateur : pas de rôle Admin, validation à la création.
+    /// Vérifie chevauchement et solde avant enregistrement.
+    /// </summary>
+    public async Task DemanderCongeAsync(Conge conge, CancellationToken cancellationToken = default)
     {
         ValiderConge(conge);
-        conge.Statut = StatutConge.EnAttente;
+        conge.Statut = StatutConge.Valide;
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureEmployeurExistsAsync(db, conge.EmployeurId, cancellationToken);
         await EnsurePasDeChevauchementAsync(db, conge, cancellationToken);
+        await EnsureSoldeSuffisantPourValidationAsync(db, conge, cancellationToken);
 
         db.Conges.Add(conge);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Réservé Admin. Un congé validé ne peut pas chevaucher un autre congé déjà validé.</summary>
-    public async Task ChangerStatutConge(int congeId, StatutConge nouveauStatut, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Valide ou refuse une demande en attente.
+    /// Tout utilisateur du foyer peut valider / refuser (pas de rôles Identity).
+    /// Un congé validé ne peut pas chevaucher un autre congé déjà validé.
+    /// </summary>
+    public async Task ChangerStatutCongeAsync(int congeId, StatutConge nouveauStatut, CancellationToken cancellationToken = default)
     {
-        await EnsureAdminAsync();
-
         if (nouveauStatut is not StatutConge.Valide and not StatutConge.Refuse)
         {
             throw new InvalidOperationException("Le nouveau statut doit être Validé ou Refusé.");
@@ -510,7 +509,7 @@ public sealed class TravailService
     /// qui tombe réellement dans l'année (répartition si le congé chevauche deux années civiles).
     /// Maladie / SansSolde / RTT : jamais déduits (voir <see cref="TypeConsommeSolde"/>).
     /// </summary>
-    public async Task<SoldeCongesInfo> SoldeCongesActuel(int employeurId, int annee, CancellationToken cancellationToken = default)
+    public async Task<SoldeCongesInfo> SoldeCongesActuelAsync(int employeurId, int annee, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureEmployeurExistsAsync(db, employeurId, cancellationToken);
@@ -670,7 +669,7 @@ public sealed class TravailService
         var today = DateTime.Today;
         var moisEcoules = today.Month;
         var moisRestants = 12 - moisEcoules;
-        var solde = await SoldeCongesActuel(employeurId, today.Year, cancellationToken);
+        var solde = await SoldeCongesActuelAsync(employeurId, today.Year, cancellationToken);
         var extra = moisEcoules == 0 || moisRestants == 0
             ? 0
             : solde.JoursPris / moisEcoules * moisRestants;
@@ -683,7 +682,7 @@ public sealed class TravailService
             solde.JoursPris);
     }
 
-    public async Task<IReadOnlyList<TravailTypePart>> RepartitionCongesPrisParType(
+    public async Task<IReadOnlyList<TravailTypePart>> RepartitionCongesPrisParTypeAsync(
         int employeurId,
         int annee,
         CancellationToken cancellationToken = default)
@@ -713,7 +712,7 @@ public sealed class TravailService
             .ToList();
     }
 
-    public async Task<List<FichePaie>> ListerFiches12DerniersMois(
+    public async Task<List<FichePaie>> ListerFiches12DerniersMoisAsync(
         int employeurId,
         CancellationToken cancellationToken = default)
     {
@@ -771,16 +770,6 @@ public sealed class TravailService
         if (added)
         {
             await db.SaveChangesAsync(cancellationToken);
-        }
-    }
-
-    /// <summary>Vérifie le rôle Admin via le circuit Blazor (pas IHttpContextAccessor, souvent null en Interactive Server).</summary>
-    private async Task EnsureAdminAsync()
-    {
-        var auth = await _authenticationStateProvider.GetAuthenticationStateAsync();
-        if (auth.User.IsInRole(RoleAdmin) != true)
-        {
-            throw new InvalidOperationException("Seul un administrateur peut valider ou refuser un congé.");
         }
     }
 

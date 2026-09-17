@@ -67,7 +67,7 @@ public sealed class FinanceService
     }
 
     /// <summary>Solde courant = solde initial + entrées − sorties.</summary>
-    public async Task<decimal> SoldeActuel(int compteId, CancellationToken cancellationToken = default)
+    public async Task<decimal> SoldeActuelAsync(int compteId, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         return await SoldeActuelAsync(db, compteId, cancellationToken);
@@ -87,7 +87,7 @@ public sealed class FinanceService
     }
 
     /// <summary>Somme des soldes des comptes de type Épargne.</summary>
-    public async Task<decimal> TotalEpargne(CancellationToken cancellationToken = default)
+    public async Task<decimal> TotalEpargneAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var ids = await db.Comptes.AsNoTracking()
@@ -188,7 +188,7 @@ public sealed class FinanceService
     /// (entrées) des 3 derniers mois calendaires sur le compte lié ; indisponible si cette moyenne
     /// est nulle ou négative.
     /// </summary>
-    public async Task<ProgressionObjectifEpargne> ProgressionObjectif(CancellationToken cancellationToken = default)
+    public async Task<ProgressionObjectifEpargne> ProgressionObjectifAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var objectif = await db.ObjectifsEpargne.AsNoTracking()
@@ -245,7 +245,7 @@ public sealed class FinanceService
     /// précisément les versements mesurés. Les totaux « tendances » externes passent par
     /// <see cref="TotauxMensuels"/>, qui exclut les virements internes.
     /// </summary>
-    public async Task<TendanceVersementsEpargne> TendanceVersementsEpargne(CancellationToken cancellationToken = default)
+    public async Task<TendanceVersementsEpargne> TendanceVersementsEpargneAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var ids = await db.Comptes.AsNoTracking()
@@ -289,7 +289,7 @@ public sealed class FinanceService
     /// <paramref name="compteDestId"/>, liées par le même <see cref="Transaction.TransfertId"/>
     /// et marquées <see cref="Transaction.EstVirementInterne"/>.
     /// </summary>
-    public async Task<(Transaction Sortie, Transaction Entree)> EffectuerVirement(
+    public async Task<(Transaction Sortie, Transaction Entree)> EffectuerVirementAsync(
         int compteSourceId,
         int compteDestId,
         decimal montant,
@@ -358,7 +358,7 @@ public sealed class FinanceService
         return (sortie, entree);
     }
 
-    public async Task<IReadOnlyList<Transaction>> ListerTransactions(
+    public async Task<IReadOnlyList<Transaction>> ListerTransactionsAsync(
         int compteId,
         DateTime? dateDebut = null,
         DateTime? dateFin = null,
@@ -370,7 +370,7 @@ public sealed class FinanceService
         return await query.OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).ToListAsync(cancellationToken);
     }
 
-    public async Task<(IReadOnlyList<Transaction> Items, int Total)> ListerTransactionsPaged(
+    public async Task<(IReadOnlyList<Transaction> Items, int Total)> ListerTransactionsPagedAsync(
         int compteId,
         DateTime? dateDebut,
         DateTime? dateFin,
@@ -397,7 +397,7 @@ public sealed class FinanceService
     }
 
     /// <summary>Crée la catégorie à la volée si le nom n'existe pas encore. Les virements passent par <see cref="EffectuerVirement"/>.</summary>
-    public async Task AjouterTransaction(Transaction transaction, CancellationToken cancellationToken = default)
+    public async Task AjouterTransactionAsync(Transaction transaction, CancellationToken cancellationToken = default)
     {
         ValiderTransaction(transaction);
         transaction.EstVirementInterne = false;
@@ -432,7 +432,7 @@ public sealed class FinanceService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SupprimerTransaction(int id, CancellationToken cancellationToken = default)
+    public async Task SupprimerTransactionAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var existing = await db.Transactions.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
@@ -513,7 +513,7 @@ public sealed class FinanceService
     /// Les virements internes (<see cref="Transaction.EstVirementInterne"/>) sont exclus via
     /// <see cref="MouvementsExternes"/>.
     /// </summary>
-    public async Task<IReadOnlyList<CategorieMontant>> RepartitionParCategorie(DateTime debut, DateTime fin, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CategorieMontant>> RepartitionParCategorieAsync(DateTime debut, DateTime fin, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var finExclusive = fin.Date.AddDays(1);
@@ -536,10 +536,10 @@ public sealed class FinanceService
     }
 
     /// <summary>Totaux d'entrées et de sorties par mois calendaire, du plus ancien au plus récent (hors virements internes).</summary>
-    public Task<IReadOnlyList<MoisTotaux>> TotauxMensuels(int nombreDeMois, CancellationToken cancellationToken = default)
-        => TotauxParMois(nombreDeMois, cancellationToken);
+    public Task<IReadOnlyList<MoisTotaux>> TotauxMensuelsAsync(int nombreDeMois, CancellationToken cancellationToken = default)
+        => TotauxParMoisAsync(nombreDeMois, cancellationToken);
 
-    public async Task<IReadOnlyList<MoisTotaux>> TotauxParMois(int nombreDeMois, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MoisTotaux>> TotauxParMoisAsync(int nombreDeMois, CancellationToken cancellationToken = default)
     {
         if (nombreDeMois < 1)
         {

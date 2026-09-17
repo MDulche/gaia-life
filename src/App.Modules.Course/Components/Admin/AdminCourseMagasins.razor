@@ -80,7 +80,7 @@
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
-    private async Task ReloadAsync() => _magasins = await Course.ListerMagasinsOrdonnes();
+    private async Task ReloadAsync() => _magasins = await Course.ListerMagasinsOrdonnesAsync();
 
     private void StartEdit(Magasin magasin)
     {

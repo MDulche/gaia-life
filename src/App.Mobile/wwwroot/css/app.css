@@ -86,3 +86,372 @@ h1:focus {
         padding-left: env(safe-area-inset-left);
     }
 }
+
+/* —— Course (mobile) —— */
+.course-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+@media (min-width: 992px) {
+    .course-dashboard {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+
+    .course-dashboard-liste {
+        flex: 1 1 60%;
+    }
+
+    .course-dashboard-side {
+        flex: 1 1 40%;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+
+.course-touch-input,
+.course-touch-btn {
+    min-height: 44px;
+}
+
+.course-check-col {
+    width: 3.25rem;
+}
+
+.course-check-hit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.course-check-input {
+    width: 1.35rem;
+    height: 1.35rem;
+    margin: 0;
+}
+
+.course-row td {
+    vertical-align: middle;
+}
+
+.finance-legend-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.finance-chart-pie {
+    width: 100%;
+    max-width: 220px;
+    display: block;
+    margin-inline: auto;
+}
+
+/* —— Travail (mobile tactile) —— */
+.travail-touch-btn {
+    min-height: 44px;
+    min-width: 44px;
+}
+
+.travail-touch-day {
+    min-height: 44px;
+}
+
+/* —— Travail (portage mobile) —— */
+.travail-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.travail-dashboard-col {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 0;
+}
+
+.travail-dashboard .widget-card {
+    min-height: 0;
+}
+
+.travail-pair {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+
+.travail-salaire-chart {
+    width: 100%;
+    max-width: 36rem;
+    height: auto;
+    display: block;
+}
+
+.travail-chart-label {
+    fill: var(--bs-secondary-color);
+    font-size: 0.7rem;
+}
+
+.travail-planning-wrap {
+    min-width: 0;
+}
+
+.travail-ponts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.travail-ponts-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.4rem;
+    background: var(--bs-body-bg);
+}
+
+.travail-ponts-item.is-planned {
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-ponts-main {
+    min-width: 0;
+    flex: 1 1 12rem;
+    font-size: 0.9rem;
+}
+
+.travail-ponts-ratio {
+    white-space: nowrap;
+}
+
+.travail-planning-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.travail-planning-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 0;
+}
+
+.travail-planning-month {
+    font-weight: 600;
+    text-transform: capitalize;
+    line-height: 1.2;
+}
+
+.travail-planning-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+}
+
+.travail-planning-weekday {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+    padding-bottom: 0.15rem;
+}
+
+.travail-planning-day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: 2.75rem;
+    padding: 0.3rem 0.35rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.35rem;
+    background: var(--bs-body-bg);
+    color: inherit;
+    text-align: left;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.travail-planning-day:hover {
+    border-color: var(--bs-primary);
+}
+
+.travail-planning-day.is-selected {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+}
+
+.travail-planning-day.is-weekend {
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-planning-day.is-today .travail-planning-day-num {
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+.travail-planning-day-muted {
+    opacity: 0.35;
+    pointer-events: none;
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-planning-day-num {
+    font-size: 0.85rem;
+}
+
+.travail-planning-hs {
+    position: absolute;
+    right: 0.3rem;
+    bottom: 0.3rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: #fd7e14;
+    box-shadow: 0 0 0 1px var(--bs-body-bg);
+}
+
+.travail-planning-hs-legend {
+    position: static;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.15rem;
+}
+
+.travail-planning-popover {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.4rem;
+    background: var(--bs-tertiary-bg);
+}
+
+.travail-planning-popover-date {
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.travail-planning-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem 1rem;
+    margin-top: 0.85rem;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color);
+}
+
+.travail-planning-legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.travail-planning-swatch {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 0.2rem;
+    border: 1px solid var(--bs-border-color);
+    flex-shrink: 0;
+}
+
+.travail-planning-swatch-weekend {
+    background: repeating-linear-gradient(
+        -45deg,
+        var(--bs-tertiary-bg),
+        var(--bs-tertiary-bg) 3px,
+        var(--bs-border-color) 3px,
+        var(--bs-border-color) 5px
+    );
+}
+
+@media (max-width: 575.98px) {
+    .travail-planning-grid {
+        gap: 0.2rem;
+    }
+
+    .travail-planning-day {
+        min-height: 2.35rem;
+        padding: 0.2rem 0.25rem;
+    }
+
+    .travail-planning-day-num {
+        font-size: 0.75rem;
+    }
+
+    .travail-planning-weekday {
+        font-size: 0.68rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .finance-dashboard {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "soldes depenses"
+            "prevision depenses"
+            "tickets depenses"
+            "charges-m charges-a"
+            "tendances epargne";
+    }
+
+    .course-dashboard {
+        grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+    }
+
+    .travail-dashboard {
+        grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
+    }
+
+    .travail-pair {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+
+.widget-card.card {
+    border: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.finance-account-primary {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--bs-body-color);
+}
+
+.finance-account-secondary {
+    font-size: 0.9375rem;
+}
+
+@media (max-width: 575.98px) {
+    .travail-touch-day {
+        min-height: 44px;
+        padding: 0.35rem 0.2rem;
+    }
+
+    .travail-planning-popover {
+        font-size: 0.9rem;
+    }
+}
+

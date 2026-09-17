@@ -1,6 +1,6 @@
 @page "/stock"
 @* Tableau des articles en stock + infos / inventaire séparés. *@
-@attribute [Authorize]
+@* Mobile (MAUI) : pas d'Identity — [Authorize] retiré (contrat mono-utilisateur). *@
 @inject StockService Stock
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation
@@ -8,6 +8,10 @@
 <PageTitle>Stock</PageTitle>
 
 <h1 class="h3 mb-3">Stock</h1>
+
+<p class="mb-3">
+    <a href="/stock/parametres" class="btn btn-outline-secondary btn-sm">Catégories &amp; admin</a>
+</p>
 
 @if (!_ready)
 {
@@ -113,7 +117,7 @@ else
     <h2 class="h6">Ajouter un article</h2>
     @if (_categories.Count == 0)
     {
-        <p class="text-muted">Créez d'abord une catégorie dans <a href="/admin/stock">l'administration Stock</a>.</p>
+        <p class="text-muted">Créez d'abord une catégorie dans <a href="/stock/parametres">les paramètres Stock</a>.</p>
     }
     else
     {

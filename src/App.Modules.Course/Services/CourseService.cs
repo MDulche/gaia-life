@@ -20,7 +20,7 @@ public sealed class CourseService : ICourseParametresQuery
         _evenements = evenements;
     }
 
-    public async Task<List<ArticleCourse>> ListerArticlesAEnAcheter(CancellationToken cancellationToken = default)
+    public async Task<List<ArticleCourse>> ListerArticlesAEnAcheterAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Articles.AsNoTracking()
@@ -32,7 +32,7 @@ public sealed class CourseService : ICourseParametresQuery
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<ArticleCourse>> ListerArticlesAchetes(CancellationToken cancellationToken = default)
+    public async Task<List<ArticleCourse>> ListerArticlesAchetesAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Articles.AsNoTracking()
@@ -47,7 +47,7 @@ public sealed class CourseService : ICourseParametresQuery
     /// <summary>
     /// Force l'état acheté. Publie <see cref="ArticleAcheteEvent"/> uniquement sur le passage false → true.
     /// </summary>
-    public async Task MarquerAchete(int articleId, bool valeur, CancellationToken cancellationToken = default)
+    public async Task MarquerAcheteAsync(int articleId, bool valeur, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == articleId, cancellationToken)
@@ -73,7 +73,7 @@ public sealed class CourseService : ICourseParametresQuery
         }
     }
 
-    public async Task AjouterArticle(ArticleCourse article, CancellationToken cancellationToken = default)
+    public async Task AjouterArticleAsync(ArticleCourse article, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(article);
         var nom = article.Nom.Trim();
@@ -112,7 +112,7 @@ public sealed class CourseService : ICourseParametresQuery
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task ModifierArticle(ArticleCourse article, CancellationToken cancellationToken = default)
+    public async Task ModifierArticleAsync(ArticleCourse article, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(article);
         var nom = article.Nom.Trim();
@@ -149,7 +149,7 @@ public sealed class CourseService : ICourseParametresQuery
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SupprimerArticle(int id, CancellationToken cancellationToken = default)
+    public async Task SupprimerArticleAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var article = await db.Articles.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
@@ -162,7 +162,7 @@ public sealed class CourseService : ICourseParametresQuery
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<CourseCategoriePart>> RepartitionParCategorie(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CourseCategoriePart>> RepartitionParCategorieAsync(CancellationToken cancellationToken = default)
     {
         var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         var finExclusive = debut.AddMonths(1);
@@ -187,7 +187,7 @@ public sealed class CourseService : ICourseParametresQuery
             .ToList();
     }
 
-    public async Task<List<Magasin>> ListerMagasinsOrdonnes(CancellationToken cancellationToken = default)
+    public async Task<List<Magasin>> ListerMagasinsOrdonnesAsync(CancellationToken cancellationToken = default)
     {
         await using (var db = await _dbFactory.CreateDbContextAsync(cancellationToken))
         {
@@ -230,7 +230,7 @@ public sealed class CourseService : ICourseParametresQuery
 
     public async Task<CourseResumeAccueil> ResumeAccueilAsync(CancellationToken cancellationToken = default)
     {
-        var restants = await ListerArticlesAEnAcheter(cancellationToken);
+        var restants = await ListerArticlesAEnAcheterAsync(cancellationToken);
         var prochain = restants
             .Where(a => a.Magasin is not null)
             .Select(a => a.Magasin!)

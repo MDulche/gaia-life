@@ -1,6 +1,23 @@
-﻿<Router AppAssembly="@typeof(MauiProgram).Assembly">
+﻿@using App.Modules.Course
+@using App.Modules.Finance
+@using App.Modules.Stock
+@using App.Modules.Travail
+@using System.Reflection
+
+<Router AppAssembly="@typeof(MauiProgram).Assembly"
+        AdditionalAssemblies="ModuleAssemblies">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)" />
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    private static readonly Assembly[] ModuleAssemblies =
+    [
+        typeof(FinanceModule).Assembly,
+        typeof(TravailModule).Assembly,
+        typeof(CourseModule).Assembly,
+        typeof(StockModule).Assembly
+    ];
+}

@@ -1,6 +1,6 @@
 @page "/finance/synthese"
 @* Graphiques SVG (répartition et totaux mensuels) via FinanceService. *@
-@attribute [Authorize]
+@* Mobile : pas d'Identity / [Authorize] (contrat migration). *@
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation
@@ -63,8 +63,8 @@
 
         var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         var fin = debut.AddMonths(1).AddDays(-1);
-        _repartition = await Finance.RepartitionParCategorie(debut, fin);
-        _totaux = await Finance.TotauxParMois(6);
+        _repartition = await Finance.RepartitionParCategorieAsync(debut, fin);
+        _totaux = await Finance.TotauxParMoisAsync(6);
         _ready = true;
     }
 }

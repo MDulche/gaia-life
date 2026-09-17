@@ -1,0 +1,166 @@
+/* Styles Finance (portés depuis le dashboard web archivé — thème clair par défaut). */
+
+.finance-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    align-items: stretch;
+    grid-template-areas:
+        "soldes"
+        "depenses"
+        "prevision"
+        "tickets"
+        "charges-m"
+        "charges-a"
+        "tendances"
+        "epargne";
+}
+
+.finance-dash-soldes { grid-area: soldes; }
+.finance-dash-depenses { grid-area: depenses; }
+.finance-dash-prevision { grid-area: prevision; }
+.finance-dash-tickets { grid-area: tickets; }
+.finance-dash-charges-m { grid-area: charges-m; }
+.finance-dash-charges-a { grid-area: charges-a; }
+.finance-dash-tendances { grid-area: tendances; }
+.finance-dash-epargne { grid-area: epargne; }
+
+.finance-dash-soldes,
+.finance-dash-depenses,
+.finance-dash-prevision,
+.finance-dash-charges-m,
+.finance-dash-charges-a,
+.finance-dash-tendances,
+.finance-dash-epargne {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.finance-dash-soldes > .widget-card,
+.finance-dash-depenses > .widget-card,
+.finance-dash-prevision > .widget-card,
+.finance-dash-charges-m > .widget-card,
+.finance-dash-charges-a > .widget-card,
+.finance-dash-tendances > .widget-card,
+.finance-dash-epargne > .widget-card {
+    flex: 1 1 auto;
+}
+
+.finance-dashboard .widget-card {
+    min-height: 0;
+}
+
+.finance-tendances-select {
+    width: auto;
+    min-width: 5.5rem;
+    display: inline-block;
+}
+
+.finance-tendances-months {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+}
+
+.finance-tendances-month {
+    flex: 1 1 0;
+    min-width: 3.25rem;
+    text-align: center;
+}
+
+.finance-tendances-rect {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 0.35rem;
+    overflow: hidden;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.finance-tendances-in {
+    background: rgba(25, 135, 84, 0.18);
+    color: #198754;
+    padding: 0.45rem 0.2rem;
+}
+
+.finance-tendances-out {
+    background: rgba(220, 53, 69, 0.16);
+    color: #dc3545;
+    padding: 0.45rem 0.2rem;
+    border-top: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.finance-tendances-label {
+    margin-top: 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.finance-tendances-total {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.35rem;
+    background: var(--bs-tertiary-bg, #f8f9fa);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.finance-chart-pie {
+    max-width: 14rem;
+    margin-inline: auto;
+    display: block;
+}
+
+.finance-account-primary {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.finance-account-secondary {
+    font-size: 0.9375rem;
+}
+
+.finance-epargne-progress {
+    height: 0.65rem;
+}
+
+.finance-amount-in { color: #198754; }
+.finance-amount-out { color: #dc3545; }
+
+.finance-legend-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 0.15rem;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+}
+
+.widget-metric {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.widget-card-title { margin-bottom: 0.5rem; }
+
+@media (min-width: 768px) {
+    .finance-dashboard {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "soldes depenses"
+            "prevision depenses"
+            "tickets depenses"
+            "charges-m charges-a"
+            "tendances epargne";
+    }
+}

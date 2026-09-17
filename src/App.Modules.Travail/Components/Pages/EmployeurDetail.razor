@@ -1,6 +1,6 @@
 @page "/travail/employeurs/{Id:int}"
 @* Tableau de bord employeur : salaire, congés / HS, fiches, graphique 12 mois. *@
-@attribute [Authorize]
+<!-- Mobile : pas d'Authorize / Identity (mono-utilisateur, CONTRAT-MIGRATION-MOBILE.md). -->
 @using System.Globalization
 @inject TravailService Travail
 @inject IActiveModuleGuard ModuleGuard
@@ -284,11 +284,7 @@
                                     <th>Dates</th>
                                     <th class="text-end">Jours</th>
                                     <th>Statut</th>
-                                    <AuthorizeView Roles="@TravailService.RoleAdmin">
-                                        <Authorized>
-                                            <th class="text-end">Actions</th>
-                                        </Authorized>
-                                    </AuthorizeView>
+                                    <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -311,19 +307,15 @@
                                                     @TravailFormat.Statut(conge.Statut)
                                                 </span>
                                             </td>
-                                            <AuthorizeView Roles="@TravailService.RoleAdmin">
-                                                <Authorized>
-                                                    <td class="text-end text-nowrap">
-                                                        @if (conge.Statut == StatutConge.EnAttente)
-                                                        {
-                                                            <button type="button" class="btn btn-sm btn-success me-1" disabled="@_busy"
-                                                                    @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Valide)">Valider</button>
-                                                            <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
-                                                                    @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Refuse)">Refuser</button>
-                                                        }
-                                                    </td>
-                                                </Authorized>
-                                            </AuthorizeView>
+                                            <td class="text-end text-nowrap">
+                                                @if (conge.Statut == StatutConge.EnAttente)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-success me-1" disabled="@_busy"
+                                                            @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Valide)">Valider</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
+                                                            @onclick="() => ChangerStatutAsync(conge.Id, StatutConge.Refuse)">Refuser</button>
+                                                }
+                                            </td>
                                         </tr>
                                     }
                                 }
@@ -493,13 +485,13 @@ else if (_ready)
         }
 
         _derniereFiche = await Travail.DerniereFichePaieAsync(Id);
-        _solde = await Travail.SoldeCongesActuel(Id, DateTime.Today.Year);
-        _fiches12 = await Travail.ListerFiches12DerniersMois(Id);
-        _fichesToutes = await Travail.ListerFichesPaie(Id);
-        _conges = await Travail.ListerConges(Id);
+        _solde = await Travail.SoldeCongesActuelAsync(Id, DateTime.Today.Year);
+        _fiches12 = await Travail.ListerFiches12DerniersMoisAsync(Id);
+        _fichesToutes = await Travail.ListerFichesPaieAsync(Id);
+        _conges = await Travail.ListerCongesAsync(Id);
         var debutMois = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        _heuresSup = await Travail.ListerHeuresSup(Id, debutMois, debutMois.AddMonths(1).AddDays(-1));
-        _totalHs = await Travail.TotalHeuresSupMoisEnCours(Id);
+        _heuresSup = await Travail.ListerHeuresSupAsync(Id, debutMois, debutMois.AddMonths(1).AddDays(-1));
+        _totalHs = await Travail.TotalHeuresSupMoisEnCoursAsync(Id);
         _pointsSalaire = BuildPointsSalaire(_fiches12);
         _opportunites = await Travail.ListerOpportunitesPontAsync(Id);
         _planningRefresh++;
@@ -652,7 +644,7 @@ else if (_ready)
         _historiqueComplet = !_historiqueComplet;
         if (_historiqueComplet && _fichesToutes.Count == 0)
         {
-            _fichesToutes = await Travail.ListerFichesPaie(Id);
+            _fichesToutes = await Travail.ListerFichesPaieAsync(Id);
         }
     }
 
@@ -677,11 +669,11 @@ else if (_ready)
             };
             if (_editHsId is int)
             {
-                await Travail.ModifierHeureSup(model);
+                await Travail.ModifierHeureSupAsync(model);
             }
             else
             {
-                await Travail.AjouterHeureSup(model);
+                await Travail.AjouterHeureSupAsync(model);
             }
 
             CancelEditHs();
@@ -697,14 +689,14 @@ else if (_ready)
 
         var id = _pendingDeleteHs.Id;
         _pendingDeleteHs = null;
-        await RunAsync(() => Travail.SupprimerHeureSup(id));
+        await RunAsync(() => Travail.SupprimerHeureSupAsync(id));
     }
 
     private async Task CreateCongeAsync()
     {
         await RunAsync(async () =>
         {
-            await Travail.DemanderConge(new Conge
+            await Travail.DemanderCongeAsync(new Conge
             {
                 EmployeurId = Id,
                 Type = _conge.Type,
@@ -742,11 +734,11 @@ else if (_ready)
             };
             if (_editFicheId is int)
             {
-                await Travail.ModifierFichePaie(model);
+                await Travail.ModifierFichePaieAsync(model);
             }
             else
             {
-                await Travail.AjouterFichePaie(model);
+                await Travail.AjouterFichePaieAsync(model);
             }
 
             CancelEditFiche();
@@ -762,11 +754,11 @@ else if (_ready)
 
         var id = _pendingDeleteFiche.Id;
         _pendingDeleteFiche = null;
-        await RunAsync(() => Travail.SupprimerFichePaie(id));
+        await RunAsync(() => Travail.SupprimerFichePaieAsync(id));
     }
 
     private async Task ChangerStatutAsync(int congeId, StatutConge statut) =>
-        await RunAsync(() => Travail.ChangerStatutConge(congeId, statut));
+        await RunAsync(() => Travail.ChangerStatutCongeAsync(congeId, statut));
 
     private async Task RunAsync(Func<Task> action)
     {

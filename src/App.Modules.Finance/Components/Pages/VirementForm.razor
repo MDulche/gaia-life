@@ -1,7 +1,7 @@
 @page "/finance/virement"
 @page "/finance/virement/{CompteSourceId:int}"
 @* Virement interne atomique : une sortie + une entrée liées par TransfertId. *@
-@attribute [Authorize]
+@* Mobile : pas d'Identity / [Authorize] (contrat migration). *@
 @using System.ComponentModel.DataAnnotations
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
@@ -124,7 +124,7 @@
         _error = null;
         try
         {
-            await Finance.EffectuerVirement(
+            await Finance.EffectuerVirementAsync(
                 Input.CompteSourceId,
                 Input.CompteDestId,
                 Input.Montant,

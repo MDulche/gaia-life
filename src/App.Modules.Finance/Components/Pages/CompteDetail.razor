@@ -1,6 +1,6 @@
 @page "/finance/comptes/{Id:int}"
 @* Détail d'un compte : transactions filtrées, pagination, suppression. *@
-@attribute [Authorize]
+@* Mobile : pas d'Identity / [Authorize] (contrat migration). *@
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation
@@ -198,10 +198,10 @@ else if (_ready)
             return;
         }
 
-        _solde = await Finance.SoldeActuel(Id);
+        _solde = await Finance.SoldeActuelAsync(Id);
         _categories = await Finance.ListerCategoriesAsync();
         var skip = (_page - 1) * PageSize;
-        (_items, _total) = await Finance.ListerTransactionsPaged(
+        (_items, _total) = await Finance.ListerTransactionsPagedAsync(
             Id,
             _filtreDebut,
             _filtreFin,
@@ -223,7 +223,7 @@ else if (_ready)
         _busy = true;
         try
         {
-            await Finance.SupprimerTransaction(_pendingDelete.Id);
+            await Finance.SupprimerTransactionAsync(_pendingDelete.Id);
             _pendingDelete = null;
             await ReloadAsync();
         }

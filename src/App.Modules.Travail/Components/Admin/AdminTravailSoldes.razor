@@ -78,7 +78,7 @@
         var lignes = new List<SoldeLigne>(employeurs.Count);
         foreach (var employeur in employeurs)
         {
-            var solde = await Travail.SoldeCongesActuel(employeur.Id, _annee);
+            var solde = await Travail.SoldeCongesActuelAsync(employeur.Id, _annee);
             lignes.Add(new SoldeLigne(employeur.Id, employeur.Nom, solde.JoursAcquis, solde.JoursPris, solde.JoursRestants));
         }
 

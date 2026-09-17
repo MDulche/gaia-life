@@ -67,7 +67,7 @@
     private async Task ReloadAsync()
     {
         _loading = true;
-        _totaux = await Finance.TotauxMensuels(_mois);
+        _totaux = await Finance.TotauxMensuelsAsync(_mois);
         _soldeNet = _totaux.Sum(t => t.Entrees - t.Sorties);
         _loading = false;
     }

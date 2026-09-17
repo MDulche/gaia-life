@@ -1,6 +1,6 @@
 @page "/finance"
 @* Tableau de bord Finance : grille 2 colonnes — charges et tendances/épargne alignées. *@
-@attribute [Authorize]
+@* Mobile : pas d'Identity / [Authorize] (contrat migration). *@
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
 @inject NavigationManager Navigation
@@ -14,6 +14,7 @@
         <div class="d-flex gap-2">
             <a class="btn btn-outline-primary btn-sm" href="/finance/virement">Virement</a>
             <a class="btn btn-outline-secondary btn-sm" href="/finance/synthese">Synthèse</a>
+            <a class="btn btn-outline-secondary btn-sm" href="/finance/parametres">Paramètres</a>
         </div>
     </div>
 
@@ -183,14 +184,14 @@
         var rows = new List<CompteRow>(comptes.Count);
         foreach (var compte in comptes)
         {
-            rows.Add(new CompteRow(compte.Id, compte.Nom, await Finance.SoldeActuel(compte.Id)));
+            rows.Add(new CompteRow(compte.Id, compte.Nom, await Finance.SoldeActuelAsync(compte.Id)));
         }
 
         _comptes = rows;
         _prevision = await Finance.PrevoirSoldeFinDeMoisAsync();
         var debut = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         var fin = debut.AddMonths(1).AddDays(-1);
-        _repartition = await Finance.RepartitionParCategorie(debut, fin);
+        _repartition = await Finance.RepartitionParCategorieAsync(debut, fin);
         _chargesMensuelles = await Finance.ListerChargesMensuellesAsync();
         _chargesAnnuelles = await Finance.ListerChargesAnnuellesAsync();
         _ready = true;

@@ -1,0 +1,28 @@
+@page "/stock/parametres"
+@* Admin articles/catégories — exposé en page autonome sur mobile (plus de /admin Identity). *@
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Stock — paramètres</PageTitle>
+
+<h1 class="h3 mb-3">Paramètres Stock</h1>
+<p class="mb-3"><a href="/stock">← Retour au stock</a></p>
+
+@if (_ready)
+{
+    <AdminStockSection />
+}
+
+@code {
+    private bool _ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await StockAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        _ready = true;
+    }
+}

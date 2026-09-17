@@ -9,7 +9,8 @@ namespace App.Modules.Travail.Data;
 /// </summary>
 public class TravailDbContext : DbContext
 {
-    public TravailDbContext(DbContextOptions<TravailDbContext> options)
+    /// <summary>Constructeur runtime et dérivé SQLite (<see cref="TravailSqliteDbContext"/>).</summary>
+    public TravailDbContext(DbContextOptions options)
         : base(options)
     {
     }
