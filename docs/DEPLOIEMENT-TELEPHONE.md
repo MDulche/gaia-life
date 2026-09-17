@@ -4,15 +4,11 @@ Guide pour installer et tester l’app MAUI Blazor Hybrid (`net9.0-android`) sur
 
 ## Lancement quotidien
 
-1. Brancher le téléphone (USB) **ou** avoir déjà une session `adb` Wi‑Fi active (voir plus bas).
-2. Double-cliquer sur [`scripts/lancer-telephone-gaialife.bat`](../scripts/lancer-telephone-gaialife.bat)  
-   **ou** en PowerShell depuis la racine du dépôt :
-
-```powershell
-.\scripts\run-device.ps1
-```
-
-3. Le script :
+1. Double-cliquer sur [`scripts/lancer-telephone-gaialife.bat`](../scripts/lancer-telephone-gaialife.bat).
+2. Au démarrage, le `.bat` propose une **connexion ADB Wi‑Fi** :
+   - renseigner **IP**, **port de pairing**, **code** (6 chiffres), **port de connexion** (souvent différent du pairing — écran principal *Débogage sans fil*) ;
+   - laisser l’**IP vide** pour un téléphone déjà en USB / déjà `adb connect`.
+3. Ensuite le script PowerShell :
    - vérifie qu’un appareil **physique** est en statut `device` (ignore les `emulator-*`) ;
    - refuse de démarrer si `unauthorized` / `offline` / aucun téléphone ;
    - si plusieurs téléphones : demande `-DeviceSerial` (ou `GAIALIFE_DEVICE_SERIAL`) ;
@@ -28,12 +24,14 @@ Journaux locaux (non versionnés) : `scripts/.device-logs/`.
 | Option / variable | Effet |
 | --- | --- |
 | `-DeviceSerial SERIAL` ou `GAIALIFE_DEVICE_SERIAL` | Force le téléphone (obligatoire si plusieurs) |
+| `-WifiIp` / `-WifiPairPort` / `-WifiPairCode` / `-WifiConnectPort` | Pairing + `adb connect` avant déploiement |
 | `-SkipRun` | Vérifie seulement la détection, sans build |
 | `-NoLogcat` | Déploie puis quitte sans suivre les logs |
 | `-LogcatSeconds 60` | Suit logcat 60 s puis quitte (sinon jusqu’à Ctrl+C) |
 
 ```powershell
 .\scripts\run-device.ps1 -DeviceSerial ABC123DEF -NoLogcat
+.\scripts\run-device.ps1 -WifiIp 192.168.1.42 -WifiPairPort 37123 -WifiPairCode 123456 -WifiConnectPort 5555
 adb devices -l
 ```
 

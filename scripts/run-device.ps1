@@ -11,6 +11,10 @@
 [CmdletBinding()]
 param(
     [string]$DeviceSerial = $(if ($env:GAIALIFE_DEVICE_SERIAL) { $env:GAIALIFE_DEVICE_SERIAL } else { '' }),
+    [string]$WifiIp = '',
+    [string]$WifiPairPort = '',
+    [string]$WifiPairCode = '',
+    [string]$WifiConnectPort = '',
     [switch]$SkipRun,
     [switch]$NoLogcat,
     [int]$LogcatSeconds = 0
@@ -242,6 +246,68 @@ function Resolve-PhysicalDeviceSerial {
     return $ready[0].Serial
 }
 
+function Connect-WifiAdb {
+    param(
+        [string]$Adb,
+        [string]$Ip,
+        [string]$PairPort,
+        [string]$PairCode,
+        [string]$ConnectPort
+    )
+
+    $Ip = ($Ip -replace '\s', '').Trim()
+    $PairPort = ($PairPort -replace '\s', '').Trim()
+    $PairCode = ($PairCode -replace '\s', '').Trim()
+    $ConnectPort = ($ConnectPort -replace '\s', '').Trim()
+
+    if (-not $Ip) {
+        return $null
+    }
+
+    Write-Step 'Connexion ADB Wi-Fi (pairing + connect)...'
+
+    if (-not $PairPort -or -not $PairCode) {
+        Stop-WithError 'Wi-Fi : IP renseignee mais port de pairing ou code manquant. Sur le telephone : Debogage sans fil > Associer avec un code.'
+    }
+    if (-not $ConnectPort) {
+        Stop-WithError 'Wi-Fi : port de connexion manquant (affiche sous Debogage sans fil, souvent different du port de pairing).'
+    }
+    if ($Ip -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
+        Stop-WithError ("IP invalide : '{0}' (attendu ex. 192.168.1.42)." -f $Ip)
+    }
+    if ($PairPort -notmatch '^\d+$' -or $ConnectPort -notmatch '^\d+$') {
+        Stop-WithError 'Ports de pairing / connexion invalides (entiers uniquement).'
+    }
+    if ($PairCode -notmatch '^\d{6}$') {
+        Write-Host 'Avertissement : le code pairing Android fait en general 6 chiffres.' -ForegroundColor Yellow
+    }
+
+    $pairTarget = '{0}:{1}' -f $Ip, $PairPort
+    $connectTarget = '{0}:{1}' -f $Ip, $ConnectPort
+
+    Write-Host ("  pair  {0}" -f $pairTarget) -ForegroundColor DarkGray
+    Write-Log ("adb pair {0} ******" -f $pairTarget)
+    $pairOut = & $Adb pair $pairTarget $PairCode 2>&1 | ForEach-Object { "$_" }
+    $pairText = ($pairOut -join ' ').Trim()
+    Write-Log ("adb pair out: {0}" -f $pairText)
+    if ($LASTEXITCODE -ne 0 -and $pairText -notmatch 'Successfully paired') {
+        Stop-WithError ("Echec adb pair ({0}). Verifiez IP/port/code (fenetre d association ouverte sur le telephone). Detail: {1}" -f $LASTEXITCODE, $pairText)
+    }
+    Write-Ok ("Pairing OK : {0}" -f $pairTarget)
+
+    Write-Host ("  connect {0}" -f $connectTarget) -ForegroundColor DarkGray
+    Write-Log ("adb connect {0}" -f $connectTarget)
+    $connOut = & $Adb connect $connectTarget 2>&1 | ForEach-Object { "$_" }
+    $connText = ($connOut -join ' ').Trim()
+    Write-Log ("adb connect out: {0}" -f $connText)
+    if ($LASTEXITCODE -ne 0 -and $connText -notmatch 'connected to') {
+        Stop-WithError ("Echec adb connect ({0}). Detail: {1}" -f $LASTEXITCODE, $connText)
+    }
+    Write-Ok ("Connecte : {0}" -f $connectTarget)
+    Start-Sleep -Seconds 1
+    return $connectTarget
+}
+
 function Start-FilteredLogcat {
     param(
         [string]$Adb,
@@ -349,6 +415,14 @@ if (-not $adb) {
     Stop-WithError ("adb introuvable. Installez platform-tools dans {0}\platform-tools." -f $sdk)
 }
 Write-Ok ("adb : {0}" -f $adb)
+
+if ($WifiIp) {
+    $wifiSerial = Connect-WifiAdb -Adb $adb -Ip $WifiIp -PairPort $WifiPairPort -PairCode $WifiPairCode -ConnectPort $WifiConnectPort
+    if ($wifiSerial -and -not $DeviceSerial) {
+        $DeviceSerial = $wifiSerial
+        Write-Log ("DeviceSerial auto (Wi-Fi)={0}" -f $DeviceSerial)
+    }
+}
 
 Write-Step 'Detection du telephone physique...'
 $serial = Resolve-PhysicalDeviceSerial -Adb $adb -PreferredSerial $DeviceSerial
