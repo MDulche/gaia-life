@@ -10,7 +10,7 @@ namespace App.Modules.Stock.Data;
 
 /// <summary>
 /// N'expose que les migrations du namespace <c>App.Modules.Stock.Migrations.Sqlite</c>
-/// pour ne pas appliquer les migrations MariaDB historiques (Data/Migrations) sur mobile.
+/// (historique MariaDB archivé hors dépôt actif).
 /// </summary>
 #pragma warning disable EF1001 // MigrationsAssembly is an internal EF API we intentionally replace
 public sealed class StockSqliteMigrationsAssembly : MigrationsAssembly

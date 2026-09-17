@@ -1,5 +1,7 @@
 # Synthèse audit Gaia-Life — Critique & Majeur
 
+> **Document historique** — audite le dashboard web désormais archivé sous `archive/web-dashboard/`, ne concerne plus le dépôt actif Android.
+
 Date : 2026-09-17 · Uniquement sévérités **Critique** et **Majeur**, toutes catégories, tri **Critique → Majeur** puis **module**.
 
 Aucun point **Critique** n’a été confirmé sur l’ensemble du périmètre audité.

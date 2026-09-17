@@ -1,14 +1,14 @@
-using App.Shared.Data;
+using App.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
 
-namespace App.Modules.Travail.Data;
+namespace App.Modules.Course.Data;
 
-/// <summary>Factory design-time pour <c>dotnet ef</c> (migrations Travail).</summary>
-public sealed class TravailDbContextFactory : IDesignTimeDbContextFactory<TravailDbContext>
+/// <summary>Factory design-time pour <c>dotnet ef</c> (migrations Course).</summary>
+public sealed class CourseDbContextFactory : IDesignTimeDbContextFactory<CourseDbContext>
 {
-    public TravailDbContext CreateDbContext(string[] args)
+    public CourseDbContext CreateDbContext(string[] args)
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
@@ -22,8 +22,8 @@ public sealed class TravailDbContextFactory : IDesignTimeDbContextFactory<Travai
         var connectionString = configuration.GetConnectionString("Default")
             ?? "Server=localhost;Port=3306;Database=gaia_life;User=gaia;Password=changeme";
 
-        var optionsBuilder = new DbContextOptionsBuilder<TravailDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<CourseDbContext>();
         GaiaMariaDb.Configure(optionsBuilder, connectionString);
-        return new TravailDbContext(optionsBuilder.Options);
+        return new CourseDbContext(optionsBuilder.Options);
     }
 }

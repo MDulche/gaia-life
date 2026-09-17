@@ -440,6 +440,9 @@ FodyWeavers.xsd
 *.sln.iml
 .idea/
 
+# Logs locaux du script d'émulateur Android (scripts/run-emulator.ps1)
+scripts/.emulator-logs/
+
 ##
 ## Visual studio for Mac
 ##

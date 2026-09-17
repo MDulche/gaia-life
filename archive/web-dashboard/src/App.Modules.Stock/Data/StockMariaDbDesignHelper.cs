@@ -1,4 +1,4 @@
-using App.Shared.Data;
+using App.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 

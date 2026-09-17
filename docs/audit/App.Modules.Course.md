@@ -1,5 +1,7 @@
 # Audit — App.Modules.Course
 
+> **Annotation** — les mentions MariaDB / dashboard de ce rapport sont historiques ; l’app active est SQLite-only (Android).
+
 Date : 2026-09-17 · Périmètre : pages, services, data, admin Course.
 
 ---

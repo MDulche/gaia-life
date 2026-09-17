@@ -27,3 +27,8 @@ Avant de porter un module, lire **[`docs/CONTRAT-MIGRATION-MOBILE.md`](docs/CONT
 ```bash
 dotnet build archive/web-dashboard/GaiaLife.WebArchive.sln
 ```
+
+## Emulateur Android
+
+Double-clic : [`scripts/lancer-emulateur-gaialife.bat`](scripts/lancer-emulateur-gaialife.bat)  
+Guide : [`docs/EMULATEUR-ANDROID.md`](docs/EMULATEUR-ANDROID.md)

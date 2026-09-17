@@ -1,5 +1,7 @@
 # Audit — App.Core
 
+> **Document historique** — audite le dashboard web désormais archivé sous `archive/web-dashboard/`, ne concerne plus le dépôt actif Android.
+
 Date : 2026-09-17 · Périmètre : `src/App.Core/**` (auth, health, Program, Admin, Identity, data).
 
 ---

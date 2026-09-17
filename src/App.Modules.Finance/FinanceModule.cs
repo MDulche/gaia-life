@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace App.Modules.Finance;
 
-/// <summary>Module Finances : factory DbContext (MariaDB archive / SQLite mobile), service, liaison Courses.</summary>
+/// <summary>Module Finances : factory DbContext SQLite, service, liaison Courses.</summary>
 public sealed class FinanceModule : IAppModule
 {
     public const string ModuleKey = "finance";
@@ -30,28 +30,13 @@ public sealed class FinanceModule : IAppModule
     {
         services.AddDbContextFactory<FinanceDbContext>((sp, options) =>
         {
-            var connectionString = ResolveConnectionString(sp);
-            if (IsSqliteConnectionString(connectionString))
-            {
-                options.UseSqlite(connectionString);
-            }
-            else
-            {
-                GaiaMariaDb.Configure(options, connectionString);
-            }
+            options.UseSqlite(ResolveConnectionString(sp));
         });
 
         // Factory compagnon pour MigrateAsync SQLite (migrations dans Migrations/Sqlite/).
         services.AddDbContextFactory<FinanceSqliteDbContext>((sp, options) =>
         {
-            var connectionString = ResolveConnectionString(sp);
-            if (!IsSqliteConnectionString(connectionString))
-            {
-                throw new InvalidOperationException(
-                    "FinanceSqliteDbContext est réservé à la chaîne SQLite (gaialife.db).");
-            }
-
-            options.UseSqlite(connectionString);
+            options.UseSqlite(ResolveConnectionString(sp));
         });
 
         services.AddScoped<FinanceService>();
@@ -62,37 +47,25 @@ public sealed class FinanceModule : IAppModule
         services.AddHostedService(sp => sp.GetRequiredService<ArticleAcheteFinanceSubscriber>());
     }
 
-    /// <summary>
-    /// Applique les migrations : SQLite via <see cref="FinanceSqliteDbContext"/>,
-    /// MariaDB via <see cref="FinanceDbContext"/> (archive web).
-    /// </summary>
+    /// <summary>Applique les migrations SQLite via <see cref="FinanceSqliteDbContext"/>.</summary>
     public static async Task MigrateAsync(IServiceProvider services, CancellationToken cancellationToken = default)
     {
         using var scope = services.CreateScope();
         var sp = scope.ServiceProvider;
 
         var sqliteFactory = sp.GetService<IDbContextFactory<FinanceSqliteDbContext>>();
-        var connectionString = TryResolveConnectionString(sp);
-        if (sqliteFactory is not null && connectionString is not null && IsSqliteConnectionString(connectionString))
-        {
-            await using var db = await sqliteFactory.CreateDbContextAsync(cancellationToken);
-            await db.Database.MigrateAsync(cancellationToken);
-            return;
-        }
-
-        var factory = sp.GetService<IDbContextFactory<FinanceDbContext>>();
-        if (factory is null)
+        if (sqliteFactory is null)
         {
             return;
         }
 
-        await using var maria = await factory.CreateDbContextAsync(cancellationToken);
-        await maria.Database.MigrateAsync(cancellationToken);
+        await using var db = await sqliteFactory.CreateDbContextAsync(cancellationToken);
+        await db.Database.MigrateAsync(cancellationToken);
     }
 
     private static string ResolveConnectionString(IServiceProvider sp) =>
         TryResolveConnectionString(sp)
-        ?? throw new InvalidOperationException("La chaîne de connexion 'Default' est introuvable.");
+        ?? throw new InvalidOperationException("La chaîne de connexion 'Default' (SQLite) est introuvable.");
 
     private static string? TryResolveConnectionString(IServiceProvider sp)
     {
@@ -104,9 +77,4 @@ public sealed class FinanceModule : IAppModule
 
         return sp.GetService<IConfiguration>()?.GetConnectionString("Default");
     }
-
-    internal static bool IsSqliteConnectionString(string connectionString) =>
-        connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase)
-        || connectionString.Contains("Filename=", StringComparison.OrdinalIgnoreCase)
-        || connectionString.Contains("DataSource=", StringComparison.OrdinalIgnoreCase);
 }

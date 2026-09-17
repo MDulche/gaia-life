@@ -1,5 +1,7 @@
 # Audit — App.Shared
 
+> **Annotation** — les mentions MariaDB / dashboard de ce rapport sont historiques ; l’app active est SQLite-only (Android).
+
 Date : 2026-09-17 · Périmètre : `src/App.Shared/**` (modules, events, contrats transverses).
 
 ---
