@@ -1,5 +1,5 @@
 @page "/finance"
-@* Tableau de bord Finance : soldes, prévision, tickets, charges, camembert, tendances, épargne. *@
+@* Tableau de bord Finance : grille 2 colonnes — charges et tendances/épargne alignées. *@
 @attribute [Authorize]
 @inject FinanceService Finance
 @inject IActiveModuleGuard ModuleGuard
@@ -23,7 +23,7 @@
     }
 
     <div class="finance-dashboard">
-        <div class="finance-dashboard-col">
+        <div class="finance-dash-soldes">
             <WidgetCard Title="Soldes des comptes" Icon="bi-cash-coin">
                 @if (_comptes.Count == 0)
                 {
@@ -43,7 +43,15 @@
                     </ul>
                 }
             </WidgetCard>
+        </div>
 
+        <div class="finance-dash-depenses">
+            <WidgetCard Title="Dépenses du mois">
+                <FinancePieChart Slices="_repartition" EmptyText="Aucune sortie enregistrée ce mois-ci." />
+            </WidgetCard>
+        </div>
+
+        <div class="finance-dash-prevision">
             @* Calcul provisoire : voir FinanceService.PrevoirSoldeFinDeMoisAsync (moyenne N jours × jours restants). *@
             <WidgetCard Title="Prévision du solde de fin de mois">
                 @if (_prevision is null)
@@ -58,12 +66,16 @@
                     </p>
                 }
             </WidgetCard>
+        </div>
 
+        <div class="finance-dash-tickets">
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-primary flex-fill" @onclick="ShowComingSoon">Voir ticket</button>
                 <button type="button" class="btn btn-outline-primary flex-fill" @onclick="ShowComingSoon">Entrer un ticket</button>
             </div>
+        </div>
 
+        <div class="finance-dash-charges-m">
             <WidgetCard Title="Charges mensuelles">
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
@@ -98,11 +110,7 @@
             </WidgetCard>
         </div>
 
-        <div class="finance-dashboard-col">
-            <WidgetCard Title="Dépenses du mois">
-                <FinancePieChart Slices="_repartition" EmptyText="Aucune sortie enregistrée ce mois-ci." />
-            </WidgetCard>
-
+        <div class="finance-dash-charges-a">
             <WidgetCard Title="Charges annuelles">
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
@@ -135,15 +143,14 @@
                     </table>
                 </div>
             </WidgetCard>
+        </div>
 
-            <div class="finance-dashboard-pair">
-                <div class="finance-dashboard-pair-item">
-                    <FinanceTendancesCard />
-                </div>
-                <div class="finance-dashboard-pair-item">
-                    <FinanceEpargneCard />
-                </div>
-            </div>
+        <div class="finance-dash-tendances">
+            <FinanceTendancesCard />
+        </div>
+
+        <div class="finance-dash-epargne">
+            <FinanceEpargneCard />
         </div>
     </div>
 }
