@@ -15,7 +15,10 @@
             <h1 class="h3 mb-1">@_compte.Nom</h1>
             <p class="text-muted mb-0">Solde actuel : <strong>@FinanceFormat.Euro(_solde)</strong></p>
         </div>
-        <button type="button" class="btn btn-primary" @onclick="GoToNewTransaction">Ajouter une transaction</button>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-primary" href="@($"/finance/virement/{Id}")">Virement</a>
+            <button type="button" class="btn btn-primary" @onclick="GoToNewTransaction">Ajouter une transaction</button>
+        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_error))
@@ -26,7 +29,18 @@
     @if (_pendingDelete is not null)
     {
         <div class="alert alert-warning" role="alertdialog">
-            <p class="mb-2">Supprimer la transaction du @_pendingDelete.Date.ToString("d") (@FinanceFormat.Signed(_pendingDelete.Type, _pendingDelete.Montant)) ?</p>
+            @if (_pendingDelete.EstVirementInterne || _pendingDelete.TransfertId is not null)
+            {
+                <p class="mb-2">
+                    Supprimer ce virement interne du @_pendingDelete.Date.ToString("d")
+                    (@FinanceFormat.Signed(_pendingDelete.Type, _pendingDelete.Montant)) ?
+                    Les deux mouvements liés seront supprimés.
+                </p>
+            }
+            else
+            {
+                <p class="mb-2">Supprimer la transaction du @_pendingDelete.Date.ToString("d") (@FinanceFormat.Signed(_pendingDelete.Type, _pendingDelete.Montant)) ?</p>
+            }
             <button type="button" class="btn btn-danger btn-sm me-2" @onclick="ConfirmDeleteAsync" disabled="@_busy">Confirmer</button>
             <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _pendingDelete = null">Annuler</button>
         </div>
@@ -84,13 +98,22 @@
                     {
                         <tr>
                             <td>@tx.Date.ToString("d")</td>
-                            <td>@tx.Categorie</td>
+                            <td>
+                                @tx.Categorie
+                                @if (tx.EstVirementInterne)
+                                {
+                                    <span class="badge text-bg-secondary ms-1">Virement</span>
+                                }
+                            </td>
                             <td>@(tx.Note ?? "—")</td>
                             <td class="text-end @(tx.Type == TypeTransaction.Entree ? "finance-amount-in" : "finance-amount-out")">
                                 @FinanceFormat.Signed(tx.Type, tx.Montant)
                             </td>
                             <td class="text-end text-nowrap">
-                                <a class="btn btn-sm btn-outline-secondary" href="@($"/finance/comptes/{Id}/transactions/{tx.Id}")">Modifier</a>
+                                @if (!tx.EstVirementInterne)
+                                {
+                                    <a class="btn btn-sm btn-outline-secondary" href="@($"/finance/comptes/{Id}/transactions/{tx.Id}")">Modifier</a>
+                                }
                                 <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _pendingDelete = tx">Supprimer</button>
                             </td>
                         </tr>

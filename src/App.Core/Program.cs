@@ -159,6 +159,7 @@ builder.Services.AddScoped<LiaisonModulesService>();
 builder.Services.AddScoped<IModuleLiaisonQuery, ModuleLiaisonQuery>();
 builder.Services.AddScoped<AppParametrageService>();
 builder.Services.AddScoped<IAppParametrageQuery>(sp => sp.GetRequiredService<AppParametrageService>());
+builder.Services.AddSingleton<App.Shared.Events.IEvenementBus, App.Shared.Events.EvenementBus>();
 
 var app = builder.Build();
 

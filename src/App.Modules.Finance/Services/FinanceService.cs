@@ -10,8 +10,11 @@ namespace App.Modules.Finance.Services;
 /// </summary>
 public sealed class FinanceService
 {
-    /// <summary>Catégorie réservée aux sorties vers un compte épargne (exclue du camembert).</summary>
-    public const string CategorieVersementEpargne = "Versement épargne";
+    /// <summary>Libellé affiché sur les deux jambes d'un virement interne (indicateur = <see cref="Transaction.EstVirementInterne"/>).</summary>
+    public const string CategorieVirementInterne = "Virement interne";
+
+    /// <summary>Catégorie de repli lors de la suppression d'une catégorie encore référencée.</summary>
+    public const string CategorieNonCategorise = "Non catégorisé";
 
     private readonly IDbContextFactory<FinanceDbContext> _dbFactory;
 
@@ -236,6 +239,12 @@ public sealed class FinanceService
             actuel >= objectif.MontantCible);
     }
 
+    /// <summary>
+    /// Comparaison des versements (entrées) sur comptes épargne, mois vs mois précédent.
+    /// Inclut volontairement les entrées <see cref="Transaction.EstVirementInterne"/> : ce sont
+    /// précisément les versements mesurés. Les totaux « tendances » externes passent par
+    /// <see cref="TotauxMensuels"/>, qui exclut les virements internes.
+    /// </summary>
     public async Task<TendanceVersementsEpargne> TendanceVersementsEpargne(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -273,6 +282,80 @@ public sealed class FinanceService
                 && t.Date >= debut
                 && t.Date < finExclusive)
             .SumAsync(t => (decimal?)t.Montant, cancellationToken) ?? 0;
+    }
+
+    /// <summary>
+    /// Crée atomiquement une sortie sur <paramref name="compteSourceId"/> et une entrée sur
+    /// <paramref name="compteDestId"/>, liées par le même <see cref="Transaction.TransfertId"/>
+    /// et marquées <see cref="Transaction.EstVirementInterne"/>.
+    /// </summary>
+    public async Task<(Transaction Sortie, Transaction Entree)> EffectuerVirement(
+        int compteSourceId,
+        int compteDestId,
+        decimal montant,
+        DateTime date,
+        CancellationToken cancellationToken = default)
+    {
+        if (compteSourceId <= 0 || compteDestId <= 0)
+        {
+            throw new InvalidOperationException("Les comptes source et destination sont obligatoires.");
+        }
+
+        if (compteSourceId == compteDestId)
+        {
+            throw new InvalidOperationException("Le compte source et le compte destination doivent être distincts.");
+        }
+
+        if (montant <= 0)
+        {
+            throw new InvalidOperationException("Le montant doit être strictement positif.");
+        }
+
+        var dateNorm = date.Date;
+        if (dateNorm > DateTime.Today.AddDays(1))
+        {
+            throw new InvalidOperationException("La date ne peut pas être plus d'un jour dans le futur.");
+        }
+
+        var montantNorm = decimal.Round(montant, 2);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var source = await db.Comptes.FirstOrDefaultAsync(c => c.Id == compteSourceId, cancellationToken)
+            ?? throw new InvalidOperationException("Compte source introuvable.");
+        var dest = await db.Comptes.FirstOrDefaultAsync(c => c.Id == compteDestId, cancellationToken)
+            ?? throw new InvalidOperationException("Compte destination introuvable.");
+
+        await EnsureCategorieCoreAsync(db, CategorieVirementInterne, "#20c997", cancellationToken);
+
+        var transfertId = Guid.NewGuid();
+        var sortie = new Transaction
+        {
+            CompteId = compteSourceId,
+            Date = dateNorm,
+            Montant = montantNorm,
+            Type = TypeTransaction.Sortie,
+            Categorie = CategorieVirementInterne,
+            Note = $"Versement vers {dest.Nom}",
+            EstVirementInterne = true,
+            TransfertId = transfertId
+        };
+        var entree = new Transaction
+        {
+            CompteId = compteDestId,
+            Date = dateNorm,
+            Montant = montantNorm,
+            Type = TypeTransaction.Entree,
+            Categorie = CategorieVirementInterne,
+            Note = $"Versement depuis {source.Nom}",
+            EstVirementInterne = true,
+            TransfertId = transfertId
+        };
+
+        // Un seul SaveChanges = une transaction DB (compatible EnableRetryOnFailure).
+        db.Transactions.Add(sortie);
+        db.Transactions.Add(entree);
+        await db.SaveChangesAsync(cancellationToken);
+        return (sortie, entree);
     }
 
     public async Task<IReadOnlyList<Transaction>> ListerTransactions(
@@ -313,10 +396,12 @@ public sealed class FinanceService
         return await db.Transactions.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
-    /// <summary>Crée la catégorie à la volée si le nom n'existe pas encore.</summary>
+    /// <summary>Crée la catégorie à la volée si le nom n'existe pas encore. Les virements passent par <see cref="EffectuerVirement"/>.</summary>
     public async Task AjouterTransaction(Transaction transaction, CancellationToken cancellationToken = default)
     {
         ValiderTransaction(transaction);
+        transaction.EstVirementInterne = false;
+        transaction.TransfertId = null;
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureCategorieCoreAsync(db, transaction.Categorie, cancellationToken: cancellationToken);
         db.Transactions.Add(transaction);
@@ -330,12 +415,20 @@ public sealed class FinanceService
         var existing = await db.Transactions.FirstOrDefaultAsync(t => t.Id == transaction.Id, cancellationToken)
             ?? throw new InvalidOperationException("Transaction introuvable.");
 
+        if (existing.EstVirementInterne || existing.TransfertId is not null)
+        {
+            throw new InvalidOperationException(
+                "Cette transaction fait partie d'un virement interne. Supprimez le virement puis recréez-en un nouveau.");
+        }
+
         await EnsureCategorieCoreAsync(db, transaction.Categorie, cancellationToken: cancellationToken);
         existing.Date = transaction.Date.Date;
         existing.Montant = decimal.Round(transaction.Montant, 2);
         existing.Type = transaction.Type;
         existing.Categorie = transaction.Categorie.Trim();
         existing.Note = string.IsNullOrWhiteSpace(transaction.Note) ? null : transaction.Note.Trim();
+        existing.EstVirementInterne = false;
+        existing.TransfertId = null;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -348,14 +441,26 @@ public sealed class FinanceService
             return;
         }
 
-        db.Transactions.Remove(existing);
+        if (existing.TransfertId is Guid transfertId)
+        {
+            var jumelles = await db.Transactions
+                .Where(t => t.TransfertId == transfertId)
+                .ToListAsync(cancellationToken);
+            db.Transactions.RemoveRange(jumelles);
+        }
+        else
+        {
+            db.Transactions.Remove(existing);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<List<Categorie>> ListerCategoriesAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        await EnsureCategorieCoreAsync(db, CategorieVersementEpargne, "#20c997", cancellationToken);
+        await EnsureCategorieCoreAsync(db, CategorieVirementInterne, "#20c997", cancellationToken);
+        await EnsureCategorieCoreAsync(db, CategorieNonCategorise, "#6c757d", cancellationToken);
         return await db.Categories.AsNoTracking().OrderBy(c => c.Nom).ToListAsync(cancellationToken);
     }
 
@@ -371,6 +476,11 @@ public sealed class FinanceService
         if (string.IsNullOrWhiteSpace(trimmed))
         {
             throw new InvalidOperationException("Le nom de la catégorie est obligatoire.");
+        }
+
+        if (EstCategorieSysteme(trimmed))
+        {
+            throw new InvalidOperationException("Ce nom est réservé à une catégorie système.");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -400,23 +510,18 @@ public sealed class FinanceService
 
     /// <summary>
     /// Totaux par catégorie de sorties sur une période (graphique camembert).
-    /// Les versements vers un compte d'épargne (catégorie réservée ou compte Type Épargne) sont exclus.
+    /// Les virements internes (<see cref="Transaction.EstVirementInterne"/>) sont exclus via
+    /// <see cref="MouvementsExternes"/>.
     /// </summary>
     public async Task<IReadOnlyList<CategorieMontant>> RepartitionParCategorie(DateTime debut, DateTime fin, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var finExclusive = fin.Date.AddDays(1);
-        var epargneIds = await db.Comptes.AsNoTracking()
-            .Where(c => c.Type == TypeCompte.Epargne)
-            .Select(c => c.Id)
-            .ToListAsync(cancellationToken);
 
-        var rows = await db.Transactions.AsNoTracking()
+        var rows = await MouvementsExternes(db.Transactions.AsNoTracking())
             .Where(t => t.Type == TypeTransaction.Sortie
                 && t.Date >= debut.Date
-                && t.Date < finExclusive
-                && t.Categorie != CategorieVersementEpargne
-                && !epargneIds.Contains(t.CompteId))
+                && t.Date < finExclusive)
             .GroupBy(t => t.Categorie)
             .Select(g => new { Categorie = g.Key, Total = g.Sum(t => t.Montant) })
             .ToListAsync(cancellationToken);
@@ -430,7 +535,7 @@ public sealed class FinanceService
             .ToList();
     }
 
-    /// <summary>Totaux d'entrées et de sorties par mois calendaire, du plus ancien au plus récent.</summary>
+    /// <summary>Totaux d'entrées et de sorties par mois calendaire, du plus ancien au plus récent (hors virements internes).</summary>
     public Task<IReadOnlyList<MoisTotaux>> TotauxMensuels(int nombreDeMois, CancellationToken cancellationToken = default)
         => TotauxParMois(nombreDeMois, cancellationToken);
 
@@ -444,7 +549,7 @@ public sealed class FinanceService
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var today = DateTime.Today;
         var start = new DateTime(today.Year, today.Month, 1).AddMonths(1 - nombreDeMois);
-        var transactions = await db.Transactions.AsNoTracking()
+        var transactions = await MouvementsExternes(db.Transactions.AsNoTracking())
             .Where(t => t.Date >= start)
             .ToListAsync(cancellationToken);
 
@@ -462,6 +567,13 @@ public sealed class FinanceService
 
         return result;
     }
+
+    /// <summary>
+    /// Requête de base des mouvements « externes » (hors virements internes).
+    /// À réutiliser pour camembert, totaux mensuels et moyenne de prévision.
+    /// </summary>
+    private static IQueryable<Transaction> MouvementsExternes(IQueryable<Transaction> query)
+        => query.Where(t => !t.EstVirementInterne);
 
     private static async Task<decimal> SoldeActuelAsync(FinanceDbContext db, int compteId, CancellationToken cancellationToken)
     {
@@ -693,6 +805,16 @@ public sealed class FinanceService
         var categorie = await db.Categories.FirstOrDefaultAsync(c => c.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Catégorie introuvable.");
 
+        if (EstCategorieSysteme(categorie.Nom))
+        {
+            throw new InvalidOperationException("Cette catégorie système ne peut pas être modifiée.");
+        }
+
+        if (EstCategorieSysteme(trimmed))
+        {
+            throw new InvalidOperationException("Ce nom est réservé à une catégorie système.");
+        }
+
         var ancienNom = categorie.Nom;
         var collision = await db.Categories.AnyAsync(c => c.Id != id && c.Nom == trimmed, cancellationToken);
         if (collision)
@@ -712,6 +834,10 @@ public sealed class FinanceService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    private static bool EstCategorieSysteme(string nom) =>
+        string.Equals(nom, CategorieVirementInterne, StringComparison.Ordinal)
+        || string.Equals(nom, CategorieNonCategorise, StringComparison.Ordinal);
+
     public async Task SupprimerCategorieAsync(int id, CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
@@ -721,8 +847,61 @@ public sealed class FinanceService
             return;
         }
 
+        if (EstCategorieSysteme(categorie.Nom))
+        {
+            throw new InvalidOperationException("Cette catégorie système ne peut pas être supprimée.");
+        }
+
+        var utilisee = await db.Transactions.CountAsync(t => t.Categorie == categorie.Nom, cancellationToken);
+        if (utilisee > 0)
+        {
+            throw new CategorieEncoreUtiliseeException(categorie.Id, categorie.Nom, utilisee);
+        }
+
         db.Categories.Remove(categorie);
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Réassigne les transactions de la catégorie vers « Non catégorisé », puis supprime la catégorie.
+    /// </summary>
+    public async Task ReassignerEtSupprimerCategorieAsync(int id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var categorie = await db.Categories.FirstOrDefaultAsync(c => c.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException("Catégorie introuvable.");
+
+        if (EstCategorieSysteme(categorie.Nom))
+        {
+            throw new InvalidOperationException("Cette catégorie système ne peut pas être supprimée.");
+        }
+
+        var ancienNom = categorie.Nom;
+        await EnsureCategorieCoreAsync(db, CategorieNonCategorise, "#6c757d", cancellationToken);
+
+        await db.Transactions
+            .Where(t => t.Categorie == ancienNom)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Categorie, CategorieNonCategorise), cancellationToken);
+
+        // Recharger au cas où EnsureCategorie a déjà commit ; l'entité peut être détachée.
+        var aSupprimer = await db.Categories.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        if (aSupprimer is not null)
+        {
+            db.Categories.Remove(aSupprimer);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task<int> CompterTransactionsParCategorieAsync(int categorieId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var categorie = await db.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.Id == categorieId, cancellationToken);
+        if (categorie is null)
+        {
+            return 0;
+        }
+
+        return await db.Transactions.CountAsync(t => t.Categorie == categorie.Nom, cancellationToken);
     }
 
     public async Task<int> GetJoursMoyennePrevisionAsync(CancellationToken cancellationToken = default)
@@ -746,11 +925,16 @@ public sealed class FinanceService
     }
 
     /// <summary>
-    /// Prévision provisoire du solde de fin de mois :
-    /// solde actuel total + (moyenne quotidienne des entrées − moyenne quotidienne des sorties)
-    /// sur les N derniers jours, multipliée par les jours restants du mois en cours.
-    /// Cette méthode de calcul est un placeholder de maquette et pourra être affinée plus tard
-    /// (saisonnalité, charges connues, exclusion des exceptions, etc.).
+    /// Prévision du solde de fin de mois (estimation d'affichage uniquement, pas une garantie comptable) :
+    /// <list type="number">
+    /// <item>solde actuel total</item>
+    /// <item>+ (moyenne quotidienne entrées − sorties) hors virements internes, sur N jours, × jours restants</item>
+    /// <item>− total des <see cref="ChargeMensuelle"/> configurées sans transaction homonyme ce mois-ci
+    /// (appariement par nom de charge + mois calendaire, sans lien FK)</item>
+    /// </list>
+    /// N'écrit aucune transaction. Les charges déjà « payées » (sortie dont la catégorie ou la note
+    /// égale le nom de la charge, ou catégorie = nom) sont détectées approximativement via le nom
+    /// de catégorie égal au nom de la charge.
     /// </summary>
     public async Task<PrevisionSoldeFinDeMois> PrevoirSoldeFinDeMoisAsync(CancellationToken cancellationToken = default)
     {
@@ -759,9 +943,11 @@ public sealed class FinanceService
         var debutFenetre = today.AddDays(1 - joursMoyenne);
         var finExclusive = today.AddDays(1);
         var joursRestants = DateTime.DaysInMonth(today.Year, today.Month) - today.Day;
+        var debutMois = new DateTime(today.Year, today.Month, 1);
+        var finMoisExclusive = debutMois.AddMonths(1);
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var mouvements = await db.Transactions.AsNoTracking()
+        var mouvements = await MouvementsExternes(db.Transactions.AsNoTracking())
             .Where(t => t.Date >= debutFenetre && t.Date < finExclusive)
             .Select(t => new { t.Type, t.Montant })
             .ToListAsync(cancellationToken);
@@ -770,8 +956,25 @@ public sealed class FinanceService
         var sorties = mouvements.Where(t => t.Type == TypeTransaction.Sortie).Sum(t => t.Montant);
         var moyenneEntrees = joursMoyenne == 0 ? 0 : entrees / joursMoyenne;
         var moyenneSorties = joursMoyenne == 0 ? 0 : sorties / joursMoyenne;
+
+        var charges = await db.ChargesMensuelles.AsNoTracking().ToListAsync(cancellationToken);
+        var categoriesPayeesCeMois = await MouvementsExternes(db.Transactions.AsNoTracking())
+            .Where(t => t.Type == TypeTransaction.Sortie
+                && t.Date >= debutMois
+                && t.Date < finMoisExclusive)
+            .Select(t => t.Categorie)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var payees = new HashSet<string>(categoriesPayeesCeMois, StringComparer.OrdinalIgnoreCase);
+
+        var chargesRestantes = charges
+            .Where(c => !payees.Contains(c.Nom))
+            .Sum(c => c.Montant);
+
         var soldeActuel = await SoldeTotalAsync(cancellationToken);
-        var prevision = soldeActuel + (moyenneEntrees - moyenneSorties) * joursRestants;
+        var prevision = soldeActuel
+            + (moyenneEntrees - moyenneSorties) * joursRestants
+            - chargesRestantes;
 
         return new PrevisionSoldeFinDeMois(
             decimal.Round(soldeActuel, 2),
@@ -779,7 +982,8 @@ public sealed class FinanceService
             joursMoyenne,
             joursRestants,
             decimal.Round(moyenneEntrees, 2),
-            decimal.Round(moyenneSorties, 2));
+            decimal.Round(moyenneSorties, 2),
+            decimal.Round(chargesRestantes, 2));
     }
 
     private static async Task<FinanceParametre> ObtenirOuCreerParametreAsync(
@@ -866,6 +1070,12 @@ public sealed class FinanceService
             throw new InvalidOperationException("La catégorie est obligatoire.");
         }
 
+        if (string.Equals(transaction.Categorie.Trim(), CategorieVirementInterne, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Pour un virement interne, utilisez la fonction Virement (pas une transaction manuelle).");
+        }
+
         transaction.Date = transaction.Date.Date;
         transaction.Montant = decimal.Round(transaction.Montant, 2);
         transaction.Categorie = transaction.Categorie.Trim();
@@ -879,14 +1089,33 @@ public sealed record CategorieMontant(string Categorie, decimal Total, string? C
 /// <summary>Entrées / sorties d'un mois calendaire.</summary>
 public sealed record MoisTotaux(DateTime Mois, decimal Entrees, decimal Sorties);
 
-/// <summary>Résultat de la prévision provisoire de fin de mois.</summary>
+/// <summary>Résultat de la prévision de fin de mois (estimation d'affichage, non comptable).</summary>
 public sealed record PrevisionSoldeFinDeMois(
     decimal SoldeActuel,
     decimal Prevision,
     int JoursMoyenne,
     int JoursRestants,
     decimal MoyenneEntreesParJour,
-    decimal MoyenneSortiesParJour);
+    decimal MoyenneSortiesParJour,
+    decimal ChargesMensuellesRestantes);
+
+/// <summary>Levée lorsque la suppression d'une catégorie est bloquée car des transactions y font référence.</summary>
+public sealed class CategorieEncoreUtiliseeException : InvalidOperationException
+{
+    public CategorieEncoreUtiliseeException(int categorieId, string nom, int nombreTransactions)
+        : base($"{nombreTransactions} transaction(s) utilisent encore la catégorie « {nom} ». Réassignez-les vers « {FinanceService.CategorieNonCategorise} » ou annulez.")
+    {
+        CategorieId = categorieId;
+        Nom = nom;
+        NombreTransactions = nombreTransactions;
+    }
+
+    public int CategorieId { get; }
+
+    public string Nom { get; }
+
+    public int NombreTransactions { get; }
+}
 
 /// <summary>Progression vers l'objectif d'épargne actif (s'il existe).</summary>
 public sealed record ProgressionObjectifEpargne(

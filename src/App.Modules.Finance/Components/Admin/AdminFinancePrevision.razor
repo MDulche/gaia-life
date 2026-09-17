@@ -17,7 +17,10 @@
             <label class="form-label" for="prevision-jours">Période de moyenne (jours)</label>
             <InputNumber id="prevision-jours" class="form-control" @bind-Value="_form.Jours" />
             <ValidationMessage For="() => _form.Jours" />
-            <div class="form-text">Utilisée par le calcul provisoire du solde de fin de mois sur /finance.</div>
+            <div class="form-text">
+                Utilisée par l'estimation du solde de fin de mois sur /finance
+                (moyenne hors virements internes, moins les charges mensuelles non encore enregistrées ce mois-ci).
+            </div>
         </div>
         <div class="col-md-3">
             <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>

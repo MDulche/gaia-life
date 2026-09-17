@@ -1,5 +1,6 @@
 using App.Modules.Finance.Components;
 using App.Modules.Finance.Data;
+using App.Modules.Finance.Liaisons;
 using App.Modules.Finance.Services;
 using App.Shared.Data;
 using App.Shared.Modules;
@@ -9,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace App.Modules.Finance;
 
-/// <summary>Module Finances : factory DbContext, service, widget d'accueil.</summary>
+/// <summary>Module Finances : factory DbContext, service, widget d'accueil, liaison Courses.</summary>
 public sealed class FinanceModule : IAppModule
 {
     public const string ModuleKey = "finance";
@@ -33,6 +34,8 @@ public sealed class FinanceModule : IAppModule
             GaiaMariaDb.Configure(options, connectionString);
         });
         services.AddScoped<FinanceService>();
+        services.AddScoped<IFinanceCompteCatalogue, FinanceCompteCatalogue>();
+        services.AddHostedService<ArticleAcheteFinanceSubscriber>();
     }
 
     /// <summary>No-op si le module n'est pas enregistré (factory absente du DI).</summary>

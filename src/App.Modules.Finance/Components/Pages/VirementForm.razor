@@ -1,0 +1,174 @@
+@page "/finance/virement"
+@page "/finance/virement/{CompteSourceId:int}"
+@* Virement interne atomique : une sortie + une entrée liées par TransfertId. *@
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@inject FinanceService Finance
+@inject IActiveModuleGuard ModuleGuard
+@inject NavigationManager Navigation
+
+<PageTitle>Virement interne</PageTitle>
+
+@if (_ready)
+{
+    <p class="mb-1"><a href="@RetourHref">← Retour</a></p>
+    <h1 class="h3 mb-4">Virement interne</h1>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+
+    <p class="text-muted small mb-3">
+        Crée simultanément une sortie et une entrée liées (même opération). Les deux mouvements
+        sont marqués comme virement interne et exclus des totaux de dépenses / tendances.
+    </p>
+
+    <EditForm Model="Input" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger" />
+
+        <div class="mb-3">
+            <label class="form-label" for="vir-source">Compte source</label>
+            <InputSelect id="vir-source" class="form-select" @bind-Value="Input.CompteSourceId">
+                <option value="0">Choisir…</option>
+                @foreach (var compte in _comptes)
+                {
+                    <option value="@compte.Id">@compte.Nom (@FinanceFormat.TypeCompteNom(compte.Type))</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="() => Input.CompteSourceId" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="vir-dest">Compte destination</label>
+            <InputSelect id="vir-dest" class="form-select" @bind-Value="Input.CompteDestId">
+                <option value="0">Choisir…</option>
+                @foreach (var compte in _comptes)
+                {
+                    <option value="@compte.Id">@compte.Nom (@FinanceFormat.TypeCompteNom(compte.Type))</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="() => Input.CompteDestId" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="vir-montant">Montant (€)</label>
+            <InputNumber id="vir-montant" class="form-control" @bind-Value="Input.Montant" step="0.01" />
+            <ValidationMessage For="() => Input.Montant" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="vir-date">Date</label>
+            <InputDate id="vir-date" class="form-control" @bind-Value="Input.Date" />
+            <ValidationMessage For="() => Input.Date" />
+        </div>
+
+        <button type="submit" class="btn btn-primary" disabled="@_busy">Effectuer le virement</button>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int? CompteSourceId { get; set; }
+
+    private bool _ready;
+    private bool _busy;
+    private string? _error;
+    private List<Compte> _comptes = [];
+    private VirementModel Input { get; set; } = new();
+
+    private string RetourHref =>
+        Input.CompteSourceId > 0 ? $"/finance/comptes/{Input.CompteSourceId}" : "/finance";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await FinanceAccess.EnsureActiveAsync(ModuleGuard, Navigation))
+        {
+            return;
+        }
+
+        _comptes = await Finance.ListerComptesAsync();
+        if (_comptes.Count < 2)
+        {
+            _error = "Il faut au moins deux comptes pour effectuer un virement.";
+        }
+
+        if (!_ready)
+        {
+            Input = new VirementModel
+            {
+                CompteSourceId = CompteSourceId is > 0 ? CompteSourceId.Value : 0,
+                CompteDestId = 0,
+                Montant = 0,
+                Date = DateTime.Today
+            };
+
+            if (Input.CompteSourceId > 0)
+            {
+                var destEpargne = _comptes.FirstOrDefault(c =>
+                    c.Id != Input.CompteSourceId && c.Type == TypeCompte.Epargne);
+                if (destEpargne is not null)
+                {
+                    Input.CompteDestId = destEpargne.Id;
+                }
+            }
+        }
+
+        _ready = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Finance.EffectuerVirement(
+                Input.CompteSourceId,
+                Input.CompteDestId,
+                Input.Montant,
+                Input.Date);
+            Navigation.NavigateTo($"/finance/comptes/{Input.CompteSourceId}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class VirementModel : IValidatableObject
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Choisissez le compte source.")]
+        public int CompteSourceId { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Choisissez le compte destination.")]
+        public int CompteDestId { get; set; }
+
+        public decimal Montant { get; set; }
+
+        public DateTime Date { get; set; } = DateTime.Today;
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (Montant <= 0)
+            {
+                yield return new ValidationResult("Le montant doit être strictement positif.", [nameof(Montant)]);
+            }
+
+            if (CompteSourceId > 0 && CompteSourceId == CompteDestId)
+            {
+                yield return new ValidationResult("Les comptes source et destination doivent être distincts.", [nameof(CompteDestId)]);
+            }
+
+            if (Date.Date > DateTime.Today.AddDays(1))
+            {
+                yield return new ValidationResult("La date ne peut pas être plus d'un jour dans le futur.", [nameof(Date)]);
+            }
+        }
+    }
+}

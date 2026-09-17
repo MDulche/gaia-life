@@ -6,6 +6,41 @@
     <div class="alert alert-danger" role="alert">@_error</div>
 }
 
+@if (_pendingDelete is not null)
+{
+    <div class="alert alert-warning" role="alertdialog">
+        @if (_pendingDelete.NombreTransactions > 0)
+        {
+            <p class="mb-2">
+                <strong>@_pendingDelete.NombreTransactions</strong> transaction(s) utilisent encore
+                la catégorie « @_pendingDelete.Nom ».
+                Vous pouvez les réassigner automatiquement vers
+                « @FinanceService.CategorieNonCategorise », puis supprimer la catégorie, ou annuler.
+            </p>
+            <button type="button" class="btn btn-warning btn-sm me-2" disabled="@_busy"
+                    @onclick="ConfirmReassignAndDeleteAsync">
+                Réassigner vers « @FinanceService.CategorieNonCategorise » et supprimer
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+                    @onclick="() => _pendingDelete = null">
+                Annuler
+            </button>
+        }
+        else
+        {
+            <p class="mb-2">Supprimer la catégorie « @_pendingDelete.Nom » ?</p>
+            <button type="button" class="btn btn-danger btn-sm me-2" disabled="@_busy"
+                    @onclick="ConfirmDeleteEmptyAsync">
+                Confirmer
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy"
+                    @onclick="() => _pendingDelete = null">
+                Annuler
+            </button>
+        }
+    </div>
+}
+
 <div class="table-responsive mb-3">
     <table class="table table-sm table-striped align-middle">
         <thead>
@@ -26,6 +61,7 @@
             {
                 @foreach (var categorie in _categories)
                 {
+                    var systeme = IsSysteme(categorie.Nom);
                     <tr>
                         @if (_editId == categorie.Id)
                         {
@@ -40,14 +76,20 @@
                         }
                         else
                         {
-                            <td>@categorie.Nom</td>
+                            <td>
+                                @categorie.Nom
+                                @if (systeme)
+                                {
+                                    <span class="badge text-bg-secondary ms-1">Système</span>
+                                }
+                            </td>
                             <td>
                                 <span class="finance-legend-swatch" style="background:@Swatch(categorie.Couleur)"></span>
                                 <code>@(categorie.Couleur ?? "auto")</code>
                             </td>
                             <td class="text-nowrap">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_busy" @onclick="() => StartEdit(categorie)">Modifier</button>
-                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="() => DeleteAsync(categorie.Id)">Supprimer</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_busy || systeme)" @onclick="() => StartEdit(categorie)">Modifier</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@(_busy || systeme)" @onclick="() => AskDeleteAsync(categorie)">Supprimer</button>
                             </td>
                         }
                     </tr>
@@ -83,10 +125,15 @@
     private string _editNom = string.Empty;
     private string? _editCouleur;
     private CategorieForm _nouveau = new();
+    private PendingDelete? _pendingDelete;
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
     private async Task ReloadAsync() => _categories = await Finance.ListerCategoriesAsync();
+
+    private static bool IsSysteme(string nom) =>
+        string.Equals(nom, FinanceService.CategorieVirementInterne, StringComparison.Ordinal)
+        || string.Equals(nom, FinanceService.CategorieNonCategorise, StringComparison.Ordinal);
 
     private static string Swatch(string? couleur) =>
         string.IsNullOrWhiteSpace(couleur) ? "#6c757d" : couleur;
@@ -103,6 +150,7 @@
         _editNom = categorie.Nom;
         _editCouleur = string.IsNullOrWhiteSpace(categorie.Couleur) ? "#66bb6a" : categorie.Couleur;
         _error = null;
+        _pendingDelete = null;
     }
 
     private async Task SaveEditAsync()
@@ -119,8 +167,54 @@
         });
     }
 
-    private async Task DeleteAsync(int id) =>
-        await RunAsync(() => Finance.SupprimerCategorieAsync(id));
+    private async Task AskDeleteAsync(Categorie categorie)
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            var count = await Finance.CompterTransactionsParCategorieAsync(categorie.Id);
+            _pendingDelete = new PendingDelete(categorie.Id, categorie.Nom, count);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmDeleteEmptyAsync()
+    {
+        if (_pendingDelete is null)
+        {
+            return;
+        }
+
+        var id = _pendingDelete.Id;
+        await RunAsync(async () =>
+        {
+            await Finance.SupprimerCategorieAsync(id);
+            _pendingDelete = null;
+        });
+    }
+
+    private async Task ConfirmReassignAndDeleteAsync()
+    {
+        if (_pendingDelete is null)
+        {
+            return;
+        }
+
+        var id = _pendingDelete.Id;
+        await RunAsync(async () =>
+        {
+            await Finance.ReassignerEtSupprimerCategorieAsync(id);
+            _pendingDelete = null;
+        });
+    }
 
     private async Task CreateAsync()
     {
@@ -149,6 +243,8 @@
             _busy = false;
         }
     }
+
+    private sealed record PendingDelete(int Id, string Nom, int NombreTransactions);
 
     private sealed class CategorieForm
     {

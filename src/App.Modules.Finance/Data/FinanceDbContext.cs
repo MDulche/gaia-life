@@ -61,7 +61,10 @@ public class FinanceDbContext : DbContext
             entity.Property(e => e.Type)
                 .HasConversion<string>()
                 .HasMaxLength(16);
+            entity.Property(e => e.EstVirementInterne).HasDefaultValue(false);
             entity.HasIndex(e => new { e.CompteId, e.Date });
+            entity.HasIndex(e => e.TransfertId);
+            entity.HasIndex(e => e.EstVirementInterne);
         });
 
         modelBuilder.Entity<Categorie>(entity =>

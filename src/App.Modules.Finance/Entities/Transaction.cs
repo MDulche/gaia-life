@@ -3,6 +3,8 @@ namespace App.Modules.Finance.Entities;
 /// <summary>
 /// Mouvement sur un compte. <see cref="Montant"/> est toujours positif ;
 /// le signe vient de <see cref="Type"/>.
+/// Les deux jambes d'un virement interne partagent le même <see cref="TransfertId"/>
+/// et ont <see cref="EstVirementInterne"/> à true.
 /// </summary>
 public class Transaction
 {
@@ -21,4 +23,10 @@ public class Transaction
     public string Categorie { get; set; } = string.Empty;
 
     public string? Note { get; set; }
+
+    /// <summary>True pour les mouvements créés par <c>EffectuerVirement</c> (exclus des totaux externes).</summary>
+    public bool EstVirementInterne { get; set; }
+
+    /// <summary>Identifiant partagé par les deux transactions d'un même virement ; null sinon.</summary>
+    public Guid? TransfertId { get; set; }
 }

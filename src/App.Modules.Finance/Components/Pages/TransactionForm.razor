@@ -19,6 +19,8 @@
         <div class="alert alert-danger" role="alert">@_error</div>
     }
 
+    @if (!_lectureSeule)
+    {
     <EditForm Model="Input" OnValidSubmit="SaveAsync">
         <DataAnnotationsValidator />
         <ValidationSummary class="text-danger" />
@@ -46,7 +48,8 @@
             <label class="form-label" for="tx-categorie">Catégorie</label>
             <InputSelect id="tx-categorie" class="form-select" @bind-Value="Input.CategorieChoice">
                 <option value="">Choisir…</option>
-                @foreach (var categorie in _categories)
+                @foreach (var categorie in _categories.Where(c =>
+                    !string.Equals(c.Nom, FinanceService.CategorieVirementInterne, StringComparison.Ordinal)))
                 {
                     <option value="@categorie.Nom">@categorie.Nom</option>
                 }
@@ -77,6 +80,7 @@
 
         <button type="submit" class="btn btn-primary" disabled="@_busy">Enregistrer</button>
     </EditForm>
+    }
 }
 
 @code {
@@ -90,6 +94,7 @@
 
     private bool _ready;
     private bool _busy;
+    private bool _lectureSeule;
     private string? _error;
     private List<Categorie> _categories = [];
     private TransactionModel Input { get; set; } = new();
@@ -118,6 +123,15 @@
                 return;
             }
 
+            if (existing.EstVirementInterne || existing.TransfertId is not null)
+            {
+                _error = "Les virements internes ne sont pas modifiables. Supprimez-les puis recréez un virement.";
+                _lectureSeule = true;
+                _ready = true;
+                return;
+            }
+
+            _lectureSeule = false;
             Input = TransactionModel.From(existing);
         }
         else if (!_ready)
