@@ -6,12 +6,11 @@ Guide pour installer et tester l’app MAUI Blazor Hybrid (`net9.0-android`) sur
 
 1. Double-cliquer sur [`scripts/lancer-telephone-gaialife.bat`](../scripts/lancer-telephone-gaialife.bat).
 2. Au démarrage, le `.bat` propose un **menu** :
-   1. **USB** (recommandé si le câble est dispo)
-   2. **Wi‑Fi déjà associé** : IP + port de l’écran principal *Débogage sans fil* (recopier juste avant : le port change souvent)
-   3. **Wi‑Fi première association** : port connexion + port pairing + code
-   4. **USB puis Wi‑Fi** : une fois en USB, `adb tcpip 5555` puis `adb connect IP:5555` (souvent plus fiable que le pairing Android 11+)
+   1. **USB**
+   2. **Wi‑Fi** : IP + Port + Code (un seul port ; code vide = `adb connect` seul)
+   3. **USB puis Wi‑Fi** : `adb tcpip 5555` puis `adb connect IP:5555`
 
-Erreur **10061 / connexion refusée** : rien n’écoute sur ce port (port périmé, débogage sans fil off, Wi‑Fi invité / isolation clients). Préférer le mode **1** ou **4**.
+Avec un code : `adb pair IP:PORT CODE` puis `adb connect IP:PORT` (même port). Erreur **10061** : mode **1**.
 3. Ensuite le script PowerShell :
    - vérifie qu’un appareil **physique** est en statut `device` (ignore les `emulator-*`) ;
    - refuse de démarrer si `unauthorized` / `offline` / aucun téléphone ;
