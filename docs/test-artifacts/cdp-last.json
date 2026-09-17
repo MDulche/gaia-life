@@ -1,0 +1,17 @@
+{
+  "id": 3,
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "rizQty": "8",
+        "rizQtyAfter": "9",
+        "stockLinkedOption": false,
+        "afterAdd": "Gaia-Life\nAbout\nCourses\nVoir les articles achetés\nListe de courses\nAjouter un article\nQuantité\nCatégorie\nDivers\nMagasin\n—\nArticle stock\n—\nRiz test\nPrix estimé\nAjouter\nAcheté\n\tNom\tQuantité\tCatégorie\tMagasin\t\n\n\tRiz courses lien\nLiaison incomplete\n\t1\t Divers\t—\tModifierSupprimer\nAchats du mois\n\nAucun achat enregistré ce mois-ci.\n\nOrdre des magasins à suivre\n\nAucun magasin configuré.\n\nMouvements de sto",
+        "afterBuy": "Gaia-Life\nAbout\nCourses\nVoir les articles achetés\nListe de courses\nAjouter un article\nQuantité\nCatégorie\nDivers\nMagasin\n—\nArticle stock\n—\nRiz test\nPrix estimé\nAjouter\nAcheté\n\tNom\tQuantité\tCatégorie\tMagasin\t\nAucun article à acheter.\nAchats du mois\n Divers\n1 article\nOrdre des magasins à suivre\n\nAucun magasin configuré.\n\nMouvements de stock\n\nLes articles liés au stock s'incrémentent automatiquement à",
+        "stockAfter": "Gaia-Life\nAbout\nStock\n\nCatégories & admin\n\nNom\tQuantité\tUnité\tCatégorie\tStatut\t\nRiz test\t9\tkg\tAlimentaire\tOK\tModifier Supprimer\nAjouter un article\nNom\nQuantité\nUnité\nSeuil alerte\nCatégorie\nAlimentaire\nAjouter",
+        "liaisonOk": true
+      }
+    }
+  }
+}
